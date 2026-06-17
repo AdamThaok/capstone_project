@@ -1,0 +1,64 @@
+=== Super Prompt (Stage 3 output) ===
+Generated: 2026-04-18T11:00:05Z
+Vector store: Pinecone index "iso-19450-v1" (384 embedded chunks)
+Retrieval: top-6 chunks for "aggregation, state-transition, agent-link"
+
+--- INJECTED RAG RULES (from ISO 19450 retrieval) ---
+
+[Chunk 127] §6.5.2 Aggregation-Participation Link
+"An aggregation-participation link from a whole object W to a part object P
+denotes that W is composed of one or more instances of P. In an executable
+artifact, this translates to a one-to-many relationship where the part
+entity holds a foreign key referencing the whole."
+
+[Chunk 203] §7.3.1 State Transition via Procedural Link
+"When a process links two states of the same object through a consumption
+or effect link, the implementation must enforce the transition as an
+atomic operation. Intermediate states are prohibited."
+
+[Chunk 089] §5.4 Agent Link Semantics
+"An agent link from object A to process P indicates A is a human or
+external actor that initiates P. In a web application context, A maps to
+an authenticated principal; P maps to an authorized endpoint."
+
+--- SEMANTIC ANALYSIS (from Gemini 1.5 Pro) ---
+
+Topology: 4 objects, 4 processes, 8 links. No cycles. One branching pattern
+detected at O2.Pending (can transition to Paid or Cancelled).
+
+Control flow: linear pipeline with one conditional branch.
+  Pending --[P3:Process Payment]--> Paid --[P4:Ship Order]--> Shipped
+  Pending --[P2:Cancel Order]--> Cancelled
+
+Persistence: all 3 objects (Customer, Order, Item) marked as informatical
+with implied persistence. Firestore collections recommended.
+
+Authorization: O1 (Customer) is the sole agent for P1, P2. Enforce
+ownership: a customer can only cancel orders where Order.customerId matches
+authenticated customer.
+
+--- FINAL GENERATION INSTRUCTIONS ---
+
+Target: Claude 4.6 (code generation)
+
+Emit a full-stack project with:
+
+1. Firebase/Firestore collections matching domainModel.entities
+   - Apply security rules: customer can read own orders, admin reads all
+2. FastAPI backend with 6 endpoints per api.endpoints
+   - Each transition endpoint validates source state before applying
+   - Use Firebase Admin SDK for DB access
+   - Return 409 Conflict if transition prerequisite not met
+3. React frontend with 3 screens per frontend.screens
+   - Use Firebase Auth for sign-in
+   - Subscribe to Firestore in real-time for OrderList
+4. Include docker-compose.yml with frontend + backend + emulator suite
+5. README.md with setup + run instructions
+6. Generate traceability table mapping every OPM id (O1..O4, P1..P4, L1..L8)
+   to the generated code artifact (file + line range)
+
+Constraints:
+- Do not add features not present in the OPM model
+- If a business rule cannot be expressed in code, add it to a validation
+  middleware and reference the BR id in comments
+- All entity IDs must be string (Firestore convention), even when OPM is silent

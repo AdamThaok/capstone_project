@@ -1,0 +1,21 @@
+{
+  "metadata": {
+    "standard": "ISO 19450:2015",
+    "parser":   "Hybrid Visual-Semantic v0.1",
+    "variant":  "simple"
+  },
+  "diagrams": [ { "id": "SD", "name": "System Diagram", "level": 0 } ],
+  "objects": [
+    { "id": "O1", "name": "Todo",  "kind": "informatical", "states": ["Open", "Done"] },
+    { "id": "O2", "name": "User",  "kind": "informatical", "states": [] }
+  ],
+  "processes": [
+    { "id": "P1", "name": "Create Todo",   "diagram": "SD" },
+    { "id": "P2", "name": "Complete Todo", "diagram": "SD" }
+  ],
+  "links": [
+    { "id": "L1", "type": "agent",        "from": "O2", "to": "P1" },
+    { "id": "L2", "type": "result",       "from": "P1", "to": "O1" },
+    { "id": "L3", "type": "state-change", "from": "O1.Open", "to": "O1.Done", "via": "P2" }
+  ]
+}

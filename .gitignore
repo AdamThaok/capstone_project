@@ -1,0 +1,17 @@
+node_modules
+.next
+.env
+.env.local
+.vercel
+*.log
+.DS_Store
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Generated sample app (build output, not source — ~60MB)
+/generated-app/
+
+# TypeScript incremental build cache (auto-regenerated)
+tsconfig.tsbuildinfo

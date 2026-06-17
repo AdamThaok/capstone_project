@@ -1,0 +1,52 @@
+{
+  "system": {
+    "name": "OPM-to-Code Smart Agent",
+    "purpose": "Autonomously transforms an uploaded OPM (ISO 19450) model into a complete, validated, deployable full-stack application.",
+    "paradigm": "Perceive -> Decide -> Act, run continuously over a job lifecycle with an iterative self-refinement loop.",
+    "standard": "ISO 19450:2015 (Object-Process Methodology)"
+  },
+
+  "layers": {
+    "perception_layer": {
+      "responsibility": "Sense the environment: ingest the OPM model and observe current job/world state.",
+      "components": [
+        { "name": "InputValidator",          "maps_to": "opm/pipeline/stage0-validate.ts", "senses": "uploaded file format / size / count" },
+        { "name": "OpmParser",                "maps_to": "opm/pipeline/stage1-parse.ts",    "senses": "diagram / PDF -> OPM IR (objects, processes, states, links, computational functions)" },
+        { "name": "KnowledgeRetriever (RAG)", "maps_to": "opm/pipeline/rag-retrieve.ts",    "senses": "relevant ISO 19450 rule chunks for this model" }
+      ]
+    },
+
+    "logic_decision_layer": {
+      "responsibility": "Evaluate the perceived state with complex decision logic (if/else/match) and choose the next action autonomously, with no human prompt.",
+      "components": [
+        { "name": "SemanticValidator", "maps_to": "opm/pipeline/opm-validate.ts",   "decides": "is the model legal? link-legality (E202/E204), at least one process (ERR-FUNC-001)" },
+        { "name": "SpecDeriver",       "maps_to": "opm/pipeline/stage2-spec.ts",     "decides": "entities / endpoints / screens implied by the IR" },
+        { "name": "QAAgent",           "maps_to": "opm/pipeline/stage5-validate.ts", "decides": "block deployment? (any failing acceptance test or security finding) via computeQaBlocking()" },
+        { "name": "Planner",           "maps_to": "opm/pipeline/runner.ts",          "decides": "which stage runs next; proceed vs. refine-again vs. halt" }
+      ]
+    },
+
+    "execution_action_layer": {
+      "responsibility": "Act on the world: produce artifacts and effect external changes.",
+      "components": [
+        { "name": "CodeGenerator", "maps_to": "opm/pipeline/stage4-codegen.ts",   "acts": "emit full-stack code; loops continuations until the file stream is complete" },
+        { "name": "Refiner",       "maps_to": "opm/pipeline/stage5-validate.ts",   "acts": "iteratively patch gaps until coverage is 100% or MAX_ITERS reached" },
+        { "name": "Deployer",      "maps_to": "opm/pipeline/stage6-deploy.ts",     "acts": "push to the user's GitHub + deploy to Railway" }
+      ]
+    },
+
+    "memory_state_layer": {
+      "responsibility": "Persist agent state across the lifecycle so perception/decisions survive restarts.",
+      "components": [
+        { "name": "JobStore", "maps_to": "opm/pipeline/jobs.ts", "stores": "stage statuses, parsed IR, coverage report, QA report, deploy URLs" }
+      ]
+    }
+  },
+
+  "control_loops": [
+    { "name": "lifecycle_loop",    "type": "while", "maps_to": "runner.runPipeline orchestration",   "purpose": "drive the agent perceive->decide->act until a terminal state (deployed / blocked / error)" },
+    { "name": "refinement_loop",   "type": "while", "maps_to": "stage5-validate.ts realValidate()",  "purpose": "iteratively refine generated code until 100% OPM coverage or MAX_ITERS" },
+    { "name": "continuation_loop", "type": "for",   "maps_to": "stage4-codegen.ts generateComplete()","purpose": "request model continuations until the emitted file stream is complete" },
+    { "name": "perception_loop",   "type": "for",   "maps_to": "stage1-parse.ts parseOpm() / retry",  "purpose": "process each uploaded file and retry the parse with backoff" }
+  ]
+}

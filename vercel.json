@@ -1,0 +1,19 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "env": {
+    "DEMO_USERNAME": "admin@opm.dev",
+    "DEMO_PASSWORD": "admin",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://fqtlxvdsmbmxzngoynne.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxdGx4dmRzbWJteHpuZ295bm5lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5MDY4MjQsImV4cCI6MjA5NjQ4MjgyNH0.bwPmSbgxkASj8aYJHMmDNs-o3-nNTG_LWrbiT6mPp_E",
+    "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxdGx4dmRzbWJteHpuZ295bm5lIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDkwNjgyNCwiZXhwIjoyMDk2NDgyODI0fQ.fWBsefgBY8bClhz46eaNJljxrFNokykkQKxKMI5TpOI"
+  },
+  "experimentalServices": {
+    "frontend": {
+      "root": "web",
+      "routePrefix": "/",
+      "framework": "nextjs"
+    }
+  }
+}

@@ -1,0 +1,1330 @@
+[
+ {
+  "chunk_id": "ONT-001",
+  "topic": "OPM elements",
+  "concept": "element",
+  "definition": "An OPM model element is a thing or a link. Things are objects and processes; links express structural or procedural relations.",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-01"
+  ],
+  "example": "Elements = things + links; objects may have states.",
+  "source": "ISO",
+  "source_reference": "ISO 3.16; 6.2.2 para 476-479",
+  "priority": "high",
+  "related_concepts": [
+   "thing",
+   "link",
+   "object",
+   "process",
+   "state"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-002",
+  "topic": "OPM thing",
+  "concept": "thing",
+  "definition": "An OPM thing is an object or a process. Objects exist; processes happen to objects. Each depends on the other: a process needs >=1 object to transform; transforming an object needs a process.",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-19"
+  ],
+  "example": "Object and Process are Things.",
+  "source": "ISO",
+  "source_reference": "ISO 3.76; 7.3.1 para 603-607",
+  "priority": "high",
+  "related_concepts": [
+   "object",
+   "process",
+   "entity"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-003",
+  "topic": "OPM entity",
+  "concept": "entity",
+  "definition": "Founder term: Entity generalizes Thing and State, i.e., {object, process, state}. ISO 19450 does not define 'entity'; it uses 'element' = thing or link.",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [],
+  "example": "State and Thing are Entities. Object and Process are Things.",
+  "source": "Dov_Dori",
+  "source_reference": "Dori 2002 sec 4.3.1; ISO silence noted",
+  "priority": "medium",
+  "related_concepts": [
+   "thing",
+   "state",
+   "element"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-004",
+  "topic": "Object definition",
+  "concept": "object",
+  "definition": "Model element representing a thing that does or might exist physically or informatically. Persistent: remains in its current implicit or explicit state until a process acts on it. A model object is a category pattern for operational instances.",
+  "category": "ontology",
+  "opl_template": "Object is essence and affiliation object.",
+  "validation_rules": [
+   "OBJ-1",
+   "OBJ-2",
+   "OBJ-3"
+  ],
+  "example": "Vehicle Occupant Group (rectangle).",
+  "source": "ISO",
+  "source_reference": "ISO 3.39; 7.1.1 para 564-569",
+  "priority": "high",
+  "related_concepts": [
+   "state",
+   "process",
+   "essence",
+   "affiliation"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-005",
+  "topic": "Object definition (founder)",
+  "concept": "object",
+  "definition": "An object is a thing that has the potential of stable, unconditional physical or mental (informatical) existence. (OCR-restored from book definition box.)",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [],
+  "example": "Static things; changed only by processes.",
+  "source": "Dov_Dori",
+  "source_reference": "Dori 2002 sec 4.4; front matter Building Blocks",
+  "priority": "medium",
+  "related_concepts": [
+   "object"
+  ],
+  "assumption": true
+ },
+ {
+  "chunk_id": "ONT-006",
+  "topic": "Process definition",
+  "concept": "process",
+  "definition": "Transformation of one or more objects: generation (creation), effect (state change), or consumption (elimination). Positive time duration. Never exists in isolation; always associated with objects.",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [
+   "PRC-1",
+   "PRC-2",
+   "VR-06"
+  ],
+  "example": "Automatic Crash Responding (ellipse).",
+  "source": "ISO",
+  "source_reference": "ISO 3.58; 7.2.1 para 579-584; 6.2.3 para 495-498",
+  "priority": "high",
+  "related_concepts": [
+   "object",
+   "transformation",
+   "transformee"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-007",
+  "topic": "Process definition (founder)",
+  "concept": "process",
+  "definition": "A process is a pattern of transformation that an object undergoes. Dynamic things, recognizable by the changes they cause to objects.",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [],
+  "example": "Processing names use gerund '-ing' form.",
+  "source": "Dov_Dori",
+  "source_reference": "Dori 2002 sec 4.4; front matter",
+  "priority": "medium",
+  "related_concepts": [
+   "process"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-008",
+  "topic": "Object-process test",
+  "concept": "object-process test",
+  "definition": "A noun denotes a process iff ALL hold: (1) time association; (2) verb association; (3) it transforms or state-maintains >=1 object. Default: nouns are objects.",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-19"
+  ],
+  "example": "Flight passes all three criteria: time, verb 'to fly', transforms Airplane location.",
+  "source": "ISO",
+  "source_reference": "ISO 7.3.2 para 610-622",
+  "priority": "high",
+  "related_concepts": [
+   "object",
+   "process",
+   "naming"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-009",
+  "topic": "State definition",
+  "concept": "state",
+  "definition": "A state is a possible situation or position of an object, meaningful only within the owning object. Stateless object: no states specified. Stateful: explicit permissible state set; at runtime an instance is at exactly one state or in transition between two.",
+  "category": "ontology",
+  "opl_template": "Object can be s1 or s2.",
+  "validation_rules": [
+   "STA-1",
+   "STA-4",
+   "VR-08"
+  ],
+  "example": "Museum Visitor can be inside the museum or out of the museum.",
+  "source": "ISO",
+  "source_reference": "ISO 3.68; 7.3.5.1 para 668-673",
+  "priority": "high",
+  "related_concepts": [
+   "object",
+   "value",
+   "transition",
+   "effect link"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-010",
+  "topic": "Initial default final states",
+  "concept": "state markers",
+  "definition": "Initial state: at system start or upon generation. Final: at completion or upon consumption. Default: most likely upon random inspection. 0+ initial, 0+ final, 0..1 default per object; roles combinable.",
+  "category": "ontology",
+  "opl_template": "State s of Object is initial|default|final.",
+  "validation_rules": [
+   "STA-3",
+   "VR-14"
+  ],
+  "example": "State preliminary of Specification is initial.",
+  "source": "ISO",
+  "source_reference": "ISO 7.3.5.3-7.3.5.4 para 685-705",
+  "priority": "high",
+  "related_concepts": [
+   "state",
+   "result link"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-011",
+  "topic": "Attribute value",
+  "concept": "value",
+  "definition": "A value is a state of an attribute; an attribute is an object characterizing another thing. Permissible values = permissible states (enumerated or ranges). Measurement units in brackets (OPD) and inline (OPL).",
+  "category": "ontology",
+  "opl_template": "Attribute of Exhibitor can be v1, v2, and v3. / ... ranges from x to y.",
+  "validation_rules": [
+   "VR-14"
+  ],
+  "example": "Temperature in degrees Celsius of Engine; 75 is a value.",
+  "source": "ISO",
+  "source_reference": "ISO 3.5; 3.81; 7.3.5.5 para 707-717; 10.3.3.2.1",
+  "priority": "high",
+  "related_concepts": [
+   "attribute",
+   "exhibition",
+   "state"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-012",
+  "topic": "No process states",
+  "concept": "process state prohibition",
+  "definition": "OPM does not model process states such as started/in-process/finished; status is modelled by subprocesses (e.g., Starting, Processing, Finishing).",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [],
+  "example": "Use subprocess decomposition, not status attributes on processes.",
+  "source": "ISO",
+  "source_reference": "ISO 3.68 NOTE para 276-278",
+  "priority": "high",
+  "related_concepts": [
+   "process",
+   "state",
+   "in-zooming"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-013",
+  "topic": "Thing generic properties",
+  "concept": "perseverance essence affiliation",
+  "definition": "Every thing has Perseverance (static=object/dynamic=process), Essence (physical/informatical), Affiliation (systemic/environmental). Defaults: Affiliation=systemic; Essence=system Primary Essence. Physical=shaded; environmental=dashed.",
+  "category": "ontology",
+  "opl_template": "Thing is physical|informatical and systemic|environmental thing-kind.",
+  "validation_rules": [
+   "OBJ-3"
+  ],
+  "example": "Physical Environmental Object is a physical and environmental object.",
+  "source": "ISO",
+  "source_reference": "ISO 7.3.3-7.3.4 para 624-665",
+  "priority": "high",
+  "related_concepts": [
+   "object",
+   "process",
+   "notation"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-014",
+  "topic": "OPD",
+  "concept": "Object-Process Diagram",
+  "definition": "Graphical representation of an OPM model or part of one: objects, processes, structural and procedural links. One OPD = one context. SD (System Diagram) = root OPD with one systemic process (the function).",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-12"
+  ],
+  "example": "OPD process tree rooted at SD navigates the model.",
+  "source": "ISO",
+  "source_reference": "ISO 3.41; 3.75; 6.2.5",
+  "priority": "high",
+  "related_concepts": [
+   "OPL",
+   "context",
+   "in-zooming",
+   "SD"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-015",
+  "topic": "OPL",
+  "concept": "Object-Process Language",
+  "definition": "Subset of English representing textually exactly what the OPD represents graphically. Bimodality: each OPD has an equivalent OPL paragraph; each construct (link+endpoints) one OPL sentence. Not two models - two views of one model.",
+  "category": "opl_grammar",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-12"
+  ],
+  "example": "Annex A of ISO 19450 gives normative EBNF.",
+  "source": "ISO",
+  "source_reference": "ISO 3.42; 6.2.1 para 463-465; 6.2.2 para 485-486; Annex A",
+  "priority": "high",
+  "related_concepts": [
+   "OPD",
+   "bimodality",
+   "construct"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-016",
+  "topic": "Transformation and roles",
+  "concept": "transformee roles",
+  "definition": "Transformation = creation, consumption, or state change; only processes transform. Transformee roles: consumee (consumed), resultee (created), affectee (state-changed). Roles are per-process: one object may be enabler for one process, transformee for another.",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-05",
+   "VR-07"
+  ],
+  "example": "A file: read-only -> instrument; edited -> affectee; deleted -> consumee; created -> resultee.",
+  "source": "ISO",
+  "source_reference": "ISO 3.77-3.78; 3.10; 3.64; 3.3; Dori 5.2.7",
+  "priority": "high",
+  "related_concepts": [
+   "consumption",
+   "result",
+   "effect",
+   "enabler"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-017",
+  "topic": "Enabler",
+  "concept": "enabler agent instrument",
+  "definition": "Enabler: object a process needs but does not transform; present throughout performance; its disappearance immediately ends the process. Agent = human enabler; instrument = non-human enabler.",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [
+   "P-A2",
+   "P-I3"
+  ],
+  "example": "Moving Truck enables Moving but is unchanged.",
+  "source": "ISO",
+  "source_reference": "ISO 3.17; 3.4; 3.30; 9.2.1 para 858-864; Dori 5.2.3-5.2.5",
+  "priority": "high",
+  "related_concepts": [
+   "agent link",
+   "instrument link",
+   "preprocess set"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-018",
+  "topic": "Pre/postprocess object sets",
+  "concept": "involved object set",
+  "definition": "Preprocess set (consumees, affectees, enablers; possibly state-specified) determines the precondition; postprocess set (resultees, affectees, enablers) the postcondition. Both non-empty for every process. Involved set = union.",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-06"
+  ],
+  "example": "Consumees pre only; resultees post only; enablers and affectees in both.",
+  "source": "ISO",
+  "source_reference": "ISO 3.32; 8.2.2 para 757-772; Dori 5.3.2",
+  "priority": "high",
+  "related_concepts": [
+   "precondition",
+   "postcondition",
+   "process"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-019",
+  "topic": "Event-Condition-Action",
+  "concept": "operational semantics",
+  "definition": "Event (object creation/appearance/state entry) triggers precondition evaluation of linked processes; the event is then lost; process performs iff precondition satisfied. Flow of execution control = successive ECA sequences.",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [
+   "P-G3"
+  ],
+  "example": "Events and preconditions in concert control process performance.",
+  "source": "ISO",
+  "source_reference": "ISO 8.2.1 para 743-756",
+  "priority": "high",
+  "related_concepts": [
+   "event link",
+   "condition link",
+   "precondition"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-020",
+  "topic": "Wait vs skip semantics",
+  "concept": "condition vs non-condition",
+  "definition": "Non-condition incoming links: process waits for the source to exist (possibly at state). Condition ('c') links: if source missing, the process is skipped/bypassed. Skip overrides wait when both kinds are unsatisfied.",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-17",
+   "P-G4"
+  ],
+  "example": "One failed condition -> process skipped, control passes on.",
+  "source": "ISO",
+  "source_reference": "ISO 8.2.3 para 775-790",
+  "priority": "high",
+  "related_concepts": [
+   "condition link",
+   "event link",
+   "precondition"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-021",
+  "topic": "Fact consistency principle",
+  "concept": "model consistency",
+  "definition": "A model fact in one OPD is true across all OPDs; no OPD may contradict another. Refinement/abstraction of a fact is not contradiction.",
+  "category": "validation_rule",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-13"
+  ],
+  "example": "'P yields A.' contradicts 'P consumes A.'; 'P affects A.' vs 'P changes A from s1 to s2.' is refinement.",
+  "source": "ISO",
+  "source_reference": "ISO 14.2.3 para 2637-2651",
+  "priority": "high",
+  "related_concepts": [
+   "OPD",
+   "refinement",
+   "validation"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-022",
+  "topic": "Procedural link uniqueness",
+  "concept": "uniqueness principle",
+  "definition": "A process connects via a transforming link to >=1 object/state. At a given abstraction, an object or one of its states has exactly one role and exactly one procedural link to a given process.",
+  "category": "validation_rule",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-05",
+   "VR-06"
+  ],
+  "example": "An object cannot be both instrument and consumee of the same process in one OPD level.",
+  "source": "ISO",
+  "source_reference": "ISO 8.1.2 para 733-737",
+  "priority": "high",
+  "related_concepts": [
+   "roles",
+   "validation"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-023",
+  "topic": "Link precedence",
+  "concept": "semantic strength",
+  "definition": "When abstraction makes links compete, retain the strongest: consumption event > consumption = result > consumption condition > effect event > effect > effect condition > agent event > agent > agent condition > instrument event > instrument > instrument condition.",
+  "category": "validation_rule",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-18"
+  ],
+  "example": "Result link prevails over effect link when out-zooming.",
+  "source": "ISO",
+  "source_reference": "ISO 14.2.4 para 2652-2726",
+  "priority": "medium",
+  "related_concepts": [
+   "abstraction",
+   "out-zooming"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-024",
+  "topic": "Refinement mechanisms",
+  "concept": "in-zooming unfolding state expression",
+  "definition": "Refinement/abstraction pairs: state expression/suppression; unfolding/folding (parts, features, specializations, instances); in-zooming/out-zooming (process in-zoom orders subprocesses temporally top-down; object in-zoom orders parts spatially).",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [],
+  "example": "OPD process tree built by in-zooming from SD.",
+  "source": "ISO",
+  "source_reference": "ISO 3.22; 3.34-3.35; 14.2.1",
+  "priority": "medium",
+  "related_concepts": [
+   "OPD",
+   "context",
+   "aggregation"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-025",
+  "topic": "Conceptual vs runtime model",
+  "concept": "operational instance",
+  "definition": "Conceptual model = pattern of structure/behaviour; behaviour occurs only when operational instances of things exist. Distinguish refinee instance (classification-instantiation) from operational instance (runtime occurrence).",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-20"
+  ],
+  "example": "A link between things implies no behaviour until operational instances exist.",
+  "source": "ISO",
+  "source_reference": "ISO 6.2.6; 3.28-3.29; 10.3.5.1 NOTE 1",
+  "priority": "medium",
+  "related_concepts": [
+   "instantiation",
+   "simulation"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "ONT-026",
+  "topic": "Function vs behaviour",
+  "concept": "function",
+  "definition": "Function = process providing functional value to a beneficiary; same function can be achieved by different behaviours/designs (bridge vs ferry for River Crossing). Begin modelling by naming the system function as primary process (SD).",
+  "category": "ontology",
+  "opl_template": "",
+  "validation_rules": [],
+  "example": "River Crossing identical for bridge and ferry; structure/behaviour differ.",
+  "source": "ISO",
+  "source_reference": "ISO 3.23; 6.1.2-6.1.4 para 403-441",
+  "priority": "medium",
+  "related_concepts": [
+   "SD",
+   "beneficiary",
+   "methodology"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "STR-001",
+  "topic": "Structural links overview",
+  "concept": "structural relation",
+  "definition": "Static, time-independent associations persisting for some interval; never contingent on time-dependent conditions. Connect like-kind things (object-object or process-process) EXCEPT exhibition-characterization, which may cross kinds.",
+  "category": "structural_link",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-03"
+  ],
+  "example": "Tagged links + 4 fundamental relations: aggregation, exhibition, generalization, instantiation.",
+  "source": "ISO",
+  "source_reference": "ISO 3.73; 10.1 para 1465-1471",
+  "priority": "high",
+  "related_concepts": [
+   "aggregation",
+   "exhibition",
+   "generalization",
+   "instantiation",
+   "tagged link"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "STR-002",
+  "topic": "Refineable and refinee",
+  "concept": "refinement roles",
+  "definition": "Each fundamental relation refines one refineable (whole, exhibitor, general, class) into refinees (parts, features, specializations, instances). Forward names: aggregation, exhibition, generalization, classification; complementary: participation, characterization, specialization, instantiation.",
+  "category": "structural_link",
+  "opl_template": "",
+  "validation_rules": [],
+  "example": "Refinee kinds map to folding/unfolding kinds.",
+  "source": "ISO",
+  "source_reference": "ISO 3.61-3.62; 10.3.1 para 1527-1541",
+  "priority": "medium",
+  "related_concepts": [
+   "unfolding",
+   "inheritance"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "STR-003",
+  "topic": "Aggregation-participation",
+  "concept": "aggregation",
+  "definition": "Whole aggregates parts. Black solid triangle; apex to whole. Whole and parts share Perseverance. Incomplete sets use an extra bar + 'at least one other part' phrasing.",
+  "category": "structural_link",
+  "opl_template": "Whole consists of Part1, Part2, ..., and Partn.",
+  "validation_rules": [
+   "VR-11"
+  ],
+  "example": "Resource Description Framework Statement consists of Subject, Predicate, and Object.",
+  "source": "ISO",
+  "source_reference": "ISO 10.3.2 para 1555-1586",
+  "priority": "high",
+  "related_concepts": [
+   "in-zooming",
+   "unfolding"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "STR-004",
+  "topic": "Exhibition-characterization",
+  "concept": "exhibition",
+  "definition": "Exhibitor exhibits features: attributes (object features) and operations (process features). Only structural relation crossing the object-process boundary. Triangle-in-triangle symbol. Attribute states are its values.",
+  "category": "structural_link",
+  "opl_template": "Exhibitor exhibits Attribute1, ..., as well as Operation1, ... (object exhibitor: attributes first; process exhibitor: operations first)",
+  "validation_rules": [
+   "V-S4",
+   "V-S5"
+  ],
+  "example": "Vehicle exhibits Travelling Medium. Travelling Medium of Vehicle can be ground, air, and water surface.",
+  "source": "ISO",
+  "source_reference": "ISO 10.3.3 para 1587-1650",
+  "priority": "high",
+  "related_concepts": [
+   "attribute",
+   "operation",
+   "value",
+   "state"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "STR-005",
+  "topic": "Generalization-specialization",
+  "concept": "generalization",
+  "definition": "General generalizes specializations of the same Perseverance; empty triangle. Specializations inherit four element kinds: parts, features, tagged structural links, procedural links. Multiple inheritance allowed; participants may be overridden via specialization.",
+  "category": "structural_link",
+  "opl_template": "Specialization is a General. / Spec1, ..., and Specn are General.",
+  "validation_rules": [
+   "VR-11",
+   "V-S8"
+  ],
+  "example": "Car, Aircraft, and Ship are Vehicles.",
+  "source": "ISO",
+  "source_reference": "ISO 10.3.4 para 1651-1707",
+  "priority": "high",
+  "related_concepts": [
+   "inheritance",
+   "discriminating attribute"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "STR-006",
+  "topic": "Discriminating attribute",
+  "concept": "specialization restriction",
+  "definition": "Inherited attribute whose distinct values identify the specializations; expressed by state-specified characterization link: each specialization exhibits one fixed value. Multiple discriminating attributes -> Cartesian-product lattice.",
+  "category": "structural_link",
+  "opl_template": "Specialized-object exhibits value-name Attribute-Name. / Attribute of Specialization is value.",
+  "validation_rules": [
+   "V-S9"
+  ],
+  "example": "Travelling Medium of Car is ground.",
+  "source": "ISO",
+  "source_reference": "ISO 10.3.4.3; 10.4.1 para 1708-1813",
+  "priority": "medium",
+  "related_concepts": [
+   "generalization",
+   "exhibition",
+   "value"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "STR-007",
+  "topic": "Classification-instantiation",
+  "concept": "instantiation",
+  "definition": "Class (object class or process class) classifies instances created by giving explicit values to the class pattern. Circle-in-triangle symbol. Instance values must fall within class value ranges. No complete/incomplete distinction. Instantiation does not form hierarchies (book).",
+  "category": "structural_link",
+  "opl_template": "Instance is an instance of Class.",
+  "validation_rules": [
+   "V-S10",
+   "V-S11",
+   "V-S12"
+  ],
+  "example": "Jack Robinson is an instance of Adult. Gender of Jack Robinson is male.",
+  "source": "ISO",
+  "source_reference": "ISO 10.3.5 para 1736-1797; Dori front matter",
+  "priority": "high",
+  "related_concepts": [
+   "object class",
+   "process class",
+   "operational instance"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "STR-008",
+  "topic": "Tagged structural links",
+  "concept": "tagged link",
+  "definition": "Modeller-defined static relations between like-kind things: unidirectional (tag), null-tagged ('relates to'), bidirectional (two tags, two sentences), reciprocal (one/no tag, 'are related'). Open arrowhead / harpoon notation.",
+  "category": "structural_link",
+  "opl_template": "Source tag Destination. | Source relates to Destination. | A and B are reciprocity-tag.",
+  "validation_rules": [
+   "V-S14"
+  ],
+  "example": "Airport serves City. Engine and Gearbox are attached.",
+  "source": "ISO",
+  "source_reference": "ISO 10.2 para 1472-1523",
+  "priority": "high",
+  "related_concepts": [
+   "structural relation"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "STR-009",
+  "topic": "Process class semantics",
+  "concept": "process class",
+  "definition": "Process class = pattern of happening (subprocess sequence) involving object classes in its pre/post sets. Process instance = particular occurrence with object instances and start/end timestamps.",
+  "category": "structural_link",
+  "opl_template": "",
+  "validation_rules": [
+   "V-S13"
+  ],
+  "example": "Process instance identified by involved object instances + timestamps.",
+  "source": "ISO",
+  "source_reference": "ISO 3.59; 10.3.5.2 para 1785-1797",
+  "priority": "medium",
+  "related_concepts": [
+   "instantiation",
+   "process"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-001",
+  "topic": "Procedural links overview",
+  "concept": "procedural link",
+  "definition": "Connect objects (or states) with processes; three families: transforming (consumption, result, effect), enabling (agent, instrument), control (event 'e', condition 'c', invocation, exception). Any incoming/outgoing transforming or enabling link may be state-specified.",
+  "category": "procedural_link",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-02",
+   "VR-04"
+  ],
+  "example": "Transformee and enabler are roles relative to a process.",
+  "source": "ISO",
+  "source_reference": "ISO 8.1 para 719-740",
+  "priority": "high",
+  "related_concepts": [
+   "transforming link",
+   "enabling link",
+   "control link"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-002",
+  "topic": "Consumption link",
+  "concept": "consumption",
+  "definition": "Process consumes (destroys, eliminates) the consumee. Closed-arrow from object to process. Precondition: consumee exists (wait). Consumption immediate at activation unless rate property + quantity attribute model gradual consumption.",
+  "category": "procedural_link",
+  "opl_template": "Processing consumes Consumee.",
+  "validation_rules": [
+   "P-C1",
+   "P-C2",
+   "P-C3"
+  ],
+  "example": "Welding consumes Steel Part A and Steel Part B.",
+  "source": "ISO",
+  "source_reference": "ISO 9.1.2 para 809-829",
+  "priority": "high",
+  "related_concepts": [
+   "consumee",
+   "preprocess set",
+   "state-specified consumption"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-003",
+  "topic": "State-specified consumption",
+  "concept": "consumption from state",
+  "definition": "Consumption from a specified state: process activates only when consumee is at that state (wait), then consumes it.",
+  "category": "procedural_link",
+  "opl_template": "Process consumes specified-state Object.",
+  "validation_rules": [
+   "VR-08"
+  ],
+  "example": "Eating consumes edible Food.",
+  "source": "ISO",
+  "source_reference": "ISO 9.3.1 para 914-936",
+  "priority": "high",
+  "related_concepts": [
+   "consumption",
+   "state"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-004",
+  "topic": "Result link",
+  "concept": "result",
+  "definition": "Process creates (generates, yields) the resultee. Closed-arrow from process to object. Generation immediate at completion (or rate-based). Postcondition: resultee exists. No control modifiers on result links.",
+  "category": "procedural_link",
+  "opl_template": "Processing yields Resultee.",
+  "validation_rules": [
+   "P-R1",
+   "P-R3",
+   "VR-09"
+  ],
+  "example": "Welding yields Steel Part AB.",
+  "source": "ISO",
+  "source_reference": "ISO 9.1.3 para 830-846",
+  "priority": "high",
+  "related_concepts": [
+   "resultee",
+   "postprocess set"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-005",
+  "topic": "State-specified result",
+  "concept": "result at state",
+  "definition": "Process yields the resultee at a specified state; postcondition includes the state. If the object has an initial state, attach the result link to the object (not the initial state) to avoid ambiguity.",
+  "category": "procedural_link",
+  "opl_template": "Process yields specified-state Object.",
+  "validation_rules": [
+   "VR-10"
+  ],
+  "example": "Mining yields raw Copper. Machining yields pre-tested Part.",
+  "source": "ISO",
+  "source_reference": "ISO 9.3.2 para 937-959",
+  "priority": "high",
+  "related_concepts": [
+   "result",
+   "initial state"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-006",
+  "topic": "Effect link",
+  "concept": "effect",
+  "definition": "Process affects a stateful object: unspecified state change. Bidirectional double-arrow. Affectee in both pre/post sets; in transition during performance; indeterminate if process aborts (use exception handling).",
+  "category": "procedural_link",
+  "opl_template": "Processing affects Affectee.",
+  "validation_rules": [
+   "VR-07"
+  ],
+  "example": "Editing affects File.",
+  "source": "ISO",
+  "source_reference": "ISO 9.1.4 para 847-852; 9.3.3.2 NOTEs",
+  "priority": "high",
+  "related_concepts": [
+   "affectee",
+   "state transition",
+   "input-output effect"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-007",
+  "topic": "Input-output-specified effect",
+  "concept": "state transition",
+  "definition": "Pair: input link (state s1 -> process) + output link (process -> state s2), same object. Pre: at s1; post: at s2. THE canonical OPM state-transition construct.",
+  "category": "procedural_link",
+  "opl_template": "Process changes Object from s1 to s2.",
+  "validation_rules": [
+   "P-E2"
+  ],
+  "example": "Purifying changes Copper from raw to pure.",
+  "source": "ISO",
+  "source_reference": "ISO 9.3.3.2 para 968-1010",
+  "priority": "high",
+  "related_concepts": [
+   "effect",
+   "state",
+   "transition"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-008",
+  "topic": "Input-/output-specified effect",
+  "concept": "partial state specification",
+  "definition": "Input-specified: 'changes Object from s1.' - output state = default state or per state probability distribution. Output-specified: 'changes Object to s2.' - any input state.",
+  "category": "procedural_link",
+  "opl_template": "Process changes Object from input-state. | Process changes Object to output-state.",
+  "validation_rules": [
+   "VR-15"
+  ],
+  "example": "Testing changes Sample from awaiting test. Cleaning & Painting changes Engine Hood to painted.",
+  "source": "ISO",
+  "source_reference": "ISO 9.3.3.3-9.3.3.4 para 1011-1034",
+  "priority": "high",
+  "related_concepts": [
+   "effect",
+   "default state"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-009",
+  "topic": "Agent link",
+  "concept": "agent",
+  "definition": "Human (or human-group) enabler necessary for activation and throughout performance; not transformed; disappearance immediately ends the process. Black lollipop from agent to process.",
+  "category": "procedural_link",
+  "opl_template": "Agent handles Processing.",
+  "validation_rules": [
+   "P-A1",
+   "P-A2",
+   "P-A3"
+  ],
+  "example": "Welder handles Welding.",
+  "source": "ISO",
+  "source_reference": "ISO 3.4; 9.2.2 para 869-887; Dori 5.2.4",
+  "priority": "high",
+  "related_concepts": [
+   "enabler",
+   "instrument",
+   "human-in-the-loop"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-010",
+  "topic": "State-specified agent",
+  "concept": "agent at state",
+  "definition": "Agent must be at the specified state for activation/performance.",
+  "category": "procedural_link",
+  "opl_template": "Specified-state Agent handles Processing.",
+  "validation_rules": [
+   "VR-08"
+  ],
+  "example": "Sober Pilot handles Flying.",
+  "source": "ISO",
+  "source_reference": "ISO 9.4.1 para 1041-1050",
+  "priority": "medium",
+  "related_concepts": [
+   "agent",
+   "state"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-011",
+  "topic": "Instrument link",
+  "concept": "instrument",
+  "definition": "Non-human, non-decision-making enabler; required for the process to occur; neither consumed nor changed (wear disregarded; if change matters, model as affectee). White lollipop.",
+  "category": "procedural_link",
+  "opl_template": "Processing requires Instrument.",
+  "validation_rules": [
+   "P-I2",
+   "P-I3"
+  ],
+  "example": "Sintering requires Sintering Oven.",
+  "source": "ISO",
+  "source_reference": "ISO 3.30; 9.2.3 para 888-908; Dori 5.2.5",
+  "priority": "high",
+  "related_concepts": [
+   "enabler",
+   "agent"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-012",
+  "topic": "State-specified instrument",
+  "concept": "instrument at state",
+  "definition": "Instrument must be at the specified state; process occurs iff so (wait semantics).",
+  "category": "procedural_link",
+  "opl_template": "Processing requires specified-state Instrument.",
+  "validation_rules": [
+   "VR-08"
+  ],
+  "example": "Moving requires serviced Moving Truck.",
+  "source": "ISO",
+  "source_reference": "ISO 9.4.2 para 1051-1075",
+  "priority": "high",
+  "related_concepts": [
+   "instrument",
+   "state",
+   "condition vs wait"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-013",
+  "topic": "Condition links",
+  "concept": "condition",
+  "definition": "Control modifier 'c' on any incoming link adds skip semantics: if source object (at state, if specified) missing, the process is bypassed, not waited for. Kinds: condition consumption/effect/agent/instrument + state-specified variants. No condition on result links.",
+  "category": "procedural_link",
+  "opl_template": "Process occurs if Object exists|is state, in which case ..., otherwise Process is skipped.",
+  "validation_rules": [
+   "VR-09",
+   "VR-17",
+   "P-Co3"
+  ],
+  "example": "Precise Measuring occurs if LASER Meter exists, otherwise Precise Measuring is skipped.",
+  "source": "ISO",
+  "source_reference": "ISO 3.9; 9.5.3 para 1228-1424",
+  "priority": "high",
+  "related_concepts": [
+   "skip semantics",
+   "guard",
+   "event link"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-014",
+  "topic": "Condition state-specified instrument",
+  "concept": "occurs if in state",
+  "definition": "ISO-exact realization of 'process occurs only if object is in state s' WITH skip semantics. For wait semantics use the unannotated state-specified link instead.",
+  "category": "procedural_link",
+  "opl_template": "Process occurs if Instrument is specified-state, otherwise Process is skipped.",
+  "validation_rules": [
+   "VR-17"
+  ],
+  "example": "Book legacy: Accessing occurs if Card is valid.",
+  "source": "ISO",
+  "source_reference": "ISO 9.5.3.4.2 para 1408-1423; Dori 5.3.3",
+  "priority": "high",
+  "related_concepts": [
+   "condition",
+   "state-specified instrument"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-015",
+  "topic": "Event links",
+  "concept": "event",
+  "definition": "Control modifier 'e': source object creation/appearance/state entry initiates precondition evaluation; event lost afterwards. Kinds: consumption/effect/agent/instrument event + state-specified variants. No result event link.",
+  "category": "procedural_link",
+  "opl_template": "Object initiates Process, which consumes|affects|requires Object. / Agent initiates and handles Process.",
+  "validation_rules": [
+   "VR-09"
+  ],
+  "example": "Food initiates Eating, which consumes Food.",
+  "source": "ISO",
+  "source_reference": "ISO 3.18-3.19; 9.5.2 para 1111-1204",
+  "priority": "high",
+  "related_concepts": [
+   "ECA",
+   "trigger",
+   "condition"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-016",
+  "topic": "Invocation links",
+  "concept": "invocation",
+  "definition": "Process-to-process control links: on completion, source immediately initiates destination (or itself). Implies transient object created and immediately consumed. Lightning-bolt notation.",
+  "category": "procedural_link",
+  "opl_template": "Invoking-process invokes invoked-process. | Invoking-process invokes itself.",
+  "validation_rules": [
+   "VR-04"
+  ],
+  "example": "Product Finishing invokes Product Shipping.",
+  "source": "ISO",
+  "source_reference": "ISO 9.5.2.5 para 1205-1227",
+  "priority": "medium",
+  "related_concepts": [
+   "control link",
+   "transient object"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-017",
+  "topic": "Exception links",
+  "concept": "overtime undertime",
+  "definition": "Time-exception routing from a process violating Minimal/Maximal Duration to a handling process. One bar = overtime, two bars = undertime.",
+  "category": "procedural_link",
+  "opl_template": "Overtime Handling Process occurs if duration of Source Process exceeds max-duration time-units.",
+  "validation_rules": [],
+  "example": "Model premature/late endings explicitly for robust control flow.",
+  "source": "ISO",
+  "source_reference": "ISO 9.5.4 para 1425-1463",
+  "priority": "medium",
+  "related_concepts": [
+   "duration",
+   "exception handling"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-018",
+  "topic": "Logical AND",
+  "concept": "AND links",
+  "definition": "Multiple same-kind links not sharing a contour point = AND; expressed as ONE OPL sentence with 'and' lists.",
+  "category": "procedural_link",
+  "opl_template": "Safe Opening requires Key A, Key B, and Key C.",
+  "validation_rules": [
+   "VR-16"
+  ],
+  "example": "Meal Preparing yields Starter, Entree, and Dessert.",
+  "source": "ISO",
+  "source_reference": "ISO 12.1 para 2053-2084",
+  "priority": "medium",
+  "related_concepts": [
+   "link fan",
+   "OR",
+   "XOR"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "PRO-019",
+  "topic": "XOR/OR link fans",
+  "concept": "link fan",
+  "definition": "Same-kind links sharing a common point = link fan with XOR (exactly one) or OR (at least one) semantics; divergent/convergent ends; optional probabilities (12.7).",
+  "category": "procedural_link",
+  "opl_template": "(see ISO clause 12 for fan OPL forms)",
+  "validation_rules": [
+   "VR-16"
+  ],
+  "example": "XOR: exactly one divergent-end thing exists/occurs.",
+  "source": "ISO",
+  "source_reference": "ISO 12.2-12.7 para 2085-...",
+  "priority": "medium",
+  "related_concepts": [
+   "AND",
+   "probability"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "OPL-001",
+  "topic": "Bimodality",
+  "concept": "OPD-OPL equivalence",
+  "definition": "Graphics and text are semantically equivalent expressions of one model; every construct has exactly one OPL sentence; OPL paragraph per OPD.",
+  "category": "opl_grammar",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-12"
+  ],
+  "example": "Non-technical stakeholders read OPL; engineers read OPD.",
+  "source": "ISO",
+  "source_reference": "ISO 6.2.1; 6.2.2",
+  "priority": "high",
+  "related_concepts": [
+   "OPD",
+   "OPL"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "OPL-002",
+  "topic": "Typography",
+  "concept": "bold capitalization",
+  "definition": "Thing names: bold, every word capitalized. States/values: bold, lowercase (except sentence-initial). Tags: bold. Reserved grammar words: non-bold.",
+  "category": "opl_grammar",
+  "opl_template": "",
+  "validation_rules": [],
+  "example": "Sober Pilot handles Flying. - 'Sober' capitalized sentence-initially only.",
+  "source": "ISO",
+  "source_reference": "ISO 7.1.2; 7.2.2; 7.3.5.2; 9.4.1 NOTE; 10.2.1 NOTE",
+  "priority": "medium",
+  "related_concepts": [
+   "naming"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "OPL-003",
+  "topic": "EBNF",
+  "concept": "formal OPL syntax",
+  "definition": "ISO 19450 Annex A (normative) specifies the complete OPL grammar in ISO/IEC 14977 EBNF; graph grammar for valid OPDs in Annex E/F.",
+  "category": "opl_grammar",
+  "opl_template": "",
+  "validation_rules": [],
+  "example": "Use Annex A productions for parser construction in later phases.",
+  "source": "ISO",
+  "source_reference": "ISO Annex A para 2728+; Annex E para 4582+",
+  "priority": "medium",
+  "related_concepts": [
+   "parser",
+   "validation"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "OPL-004",
+  "topic": "Generic property sentences",
+  "concept": "essence affiliation OPL",
+  "definition": "Things declare non-default generic properties: 'Thing is physical.' 'Thing is environmental and physical.' Defaults unexpressed once the thing is linked.",
+  "category": "opl_grammar",
+  "opl_template": "Thing is [essence][ and affiliation] object|process.",
+  "validation_rules": [],
+  "example": "Testing is environmental and physical.",
+  "source": "ISO",
+  "source_reference": "ISO 7.3.3 Fig. 4; 7.3.4 para 662-665",
+  "priority": "medium",
+  "related_concepts": [
+   "essence",
+   "affiliation"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "VAL-001",
+  "topic": "Element classification check",
+  "concept": "element validation",
+  "definition": "Every node is object, process, or state-of-an-object; every edge is a classified link. Unclassifiable elements are errors.",
+  "category": "validation_rule",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-01",
+   "VR-02"
+  ],
+  "example": "A 'state' floating outside any object is invalid.",
+  "source": "ISO",
+  "source_reference": "ISO 3.16; 7.3.5.1",
+  "priority": "high",
+  "related_concepts": [
+   "validator"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "VAL-002",
+  "topic": "Endpoint legality check",
+  "concept": "link validation",
+  "definition": "Check each link kind's legal source/target per the legality matrix: structural like-kind (except exhibition); procedural object/state<->process; invocation/exception process->process.",
+  "category": "validation_rule",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-03",
+   "VR-04"
+  ],
+  "example": "Aggregation between an object and a process: error.",
+  "source": "ISO",
+  "source_reference": "ISO 10.1; 3.57; 9.5",
+  "priority": "high",
+  "related_concepts": [
+   "validator",
+   "legality matrix"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "VAL-003",
+  "topic": "OPL equivalence check",
+  "concept": "bimodal validation",
+  "definition": "Each graphical construct must produce exactly one OPL sentence matching its template, and vice versa; orphan sentences or undumped links are errors.",
+  "category": "validation_rule",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-12"
+  ],
+  "example": "Link without sentence: incomplete model serialization.",
+  "source": "ISO",
+  "source_reference": "ISO 6.2.2 para 485-486",
+  "priority": "high",
+  "related_concepts": [
+   "validator",
+   "OPL"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "VAL-004",
+  "topic": "State transition check",
+  "concept": "state validation",
+  "definition": "For every effect-link family: states belong to the affectee; s1 != s2 for input-output pairs; input-specified requires default state/distribution; affectee stateful.",
+  "category": "validation_rule",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-07",
+   "VR-08",
+   "VR-15"
+  ],
+  "example": "'changes Copper from raw to pure' - raw, pure must be Copper states.",
+  "source": "ISO",
+  "source_reference": "ISO 9.3.3",
+  "priority": "high",
+  "related_concepts": [
+   "validator",
+   "effect"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "VAL-005",
+  "topic": "Process completeness check",
+  "concept": "procedural consistency",
+  "definition": "Every process: >=1 transforming link; non-empty pre/post sets; role uniqueness per object; no contradicting facts across OPDs.",
+  "category": "validation_rule",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-05",
+   "VR-06",
+   "VR-13"
+  ],
+  "example": "A process with only enablers and no transformee is invalid.",
+  "source": "ISO",
+  "source_reference": "ISO 8.1.2; 8.2.2; 14.2.3",
+  "priority": "high",
+  "related_concepts": [
+   "validator",
+   "process"
+  ],
+  "assumption": false
+ },
+ {
+  "chunk_id": "VAL-006",
+  "topic": "Ambiguity and assumption logging",
+  "concept": "ambiguity detection",
+  "definition": "Wait-vs-skip intent, missing fan semantics (AND vs OR/XOR), unnamed tags, incomplete refinee sets without annotation: flag, choose documented default, log assumption. No code generation before validation passes.",
+  "category": "validation_rule",
+  "opl_template": "",
+  "validation_rules": [
+   "VR-16",
+   "VR-17",
+   "VR-20"
+  ],
+  "example": "Default: state requirement = wait semantics; log as assumption.",
+  "source": "ISO",
+  "source_reference": "ISO 8.2.3; 12; conventions of this KB",
+  "priority": "high",
+  "related_concepts": [
+   "validator",
+   "assumptions"
+  ],
+  "assumption": true
+ }
+]

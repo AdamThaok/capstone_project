@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "derivedFrom": "opm_model.json",
+    "inferenceEngine": "Gemini 1.5 Pro + GPT-4o (semantic pass)",
+    "generatedAt": "2026-04-18T11:00:03Z"
+  },
+  "domainModel": {
+    "entities": [
+      {
+        "name": "Customer",
+        "source": "O1",
+        "persistence": "firestore",
+        "fields": [
+          { "name": "id",    "type": "string", "primary": true },
+          { "name": "name",  "type": "string", "required": true },
+          { "name": "email", "type": "string", "required": true, "unique": true }
+        ]
+      },
+      {
+        "name": "Order",
+        "source": "O2",
+        "persistence": "firestore",
+        "fields": [
+          { "name": "id",         "type": "string", "primary": true },
+          { "name": "customerId", "type": "string", "foreignKey": "Customer.id" },
+          { "name": "status",     "type": "enum",   "values": ["Pending", "Paid", "Shipped", "Cancelled"], "default": "Pending" },
+          { "name": "total",      "type": "number", "required": true },
+          { "name": "createdAt",  "type": "timestamp" }
+        ]
+      },
+      {
+        "name": "Item",
+        "source": "O3",
+        "persistence": "firestore",
+        "fields": [
+          { "name": "id",      "type": "string", "primary": true },
+          { "name": "orderId", "type": "string", "foreignKey": "Order.id" },
+          { "name": "sku",     "type": "string", "required": true },
+          { "name": "qty",     "type": "number", "required": true },
+          { "name": "price",   "type": "number", "required": true }
+        ]
+      }
+    ]
+  },
+  "api": {
+    "framework": "FastAPI",
+    "endpoints": [
+      { "method": "POST",   "path": "/orders",           "source": "P1", "op": "create", "auth": "customer" },
+      { "method": "DELETE", "path": "/orders/:id",       "source": "P2", "op": "transition", "transition": "Pending->Cancelled" },
+      { "method": "POST",   "path": "/orders/:id/pay",   "source": "P3", "op": "transition", "transition": "Pending->Paid" },
+      { "method": "POST",   "path": "/orders/:id/ship",  "source": "P4", "op": "transition", "transition": "Paid->Shipped" },
+      { "method": "GET",    "path": "/orders",           "source": "derived", "op": "list" },
+      { "method": "GET",    "path": "/orders/:id",       "source": "derived", "op": "read" }
+    ]
+  },
+  "frontend": {
+    "framework": "React",
+    "screens": [
+      { "name": "OrderList",   "route": "/",            "reads": ["Order"] },
+      { "name": "OrderDetail", "route": "/orders/:id",  "reads": ["Order", "Item"], "writes": ["Order.status"] },
+      { "name": "NewOrder",    "route": "/orders/new",  "writes": ["Order", "Item"] }
+    ]
+  },
+  "businessRules": [
+    { "id": "BR1", "source": "L5", "rule": "Order can transition from Pending to Paid only after successful Payment consumption" },
+    { "id": "BR2", "source": "L6", "rule": "Order can transition from Paid to Shipped via Ship Order process" },
+    { "id": "BR3", "source": "L8", "rule": "Order can transition from Pending to Cancelled via Cancel Order process" },
+    { "id": "BR4", "source": "L3", "rule": "Order must aggregate at least one Item" }
+  ]
+}

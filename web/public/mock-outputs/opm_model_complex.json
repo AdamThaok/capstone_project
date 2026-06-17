@@ -1,0 +1,43 @@
+{
+  "metadata": {
+    "standard": "ISO 19450:2015",
+    "parser":   "Hybrid Visual-Semantic v0.1",
+    "variant":  "complex"
+  },
+  "diagrams": [
+    { "id": "SD",  "name": "System Diagram",   "level": 0 },
+    { "id": "SD1", "name": "Book Appointment", "level": 1, "parent": "SD" },
+    { "id": "SD2", "name": "Process Payment",  "level": 1, "parent": "SD" }
+  ],
+  "objects": [
+    { "id": "O1", "name": "Patient",     "kind": "informatical", "states": [] },
+    { "id": "O2", "name": "Doctor",      "kind": "informatical", "states": ["Available", "Busy", "OffDuty"] },
+    { "id": "O3", "name": "Appointment", "kind": "informatical", "states": ["Requested", "Confirmed", "Completed", "Cancelled"] },
+    { "id": "O4", "name": "Prescription","kind": "informatical", "states": [] },
+    { "id": "O5", "name": "Invoice",     "kind": "informatical", "states": ["Unpaid", "Paid"] },
+    { "id": "O6", "name": "Payment",     "kind": "informatical", "states": [] }
+  ],
+  "processes": [
+    { "id": "P1", "name": "Book Appointment",   "diagram": "SD" },
+    { "id": "P2", "name": "Confirm Appointment","diagram": "SD1" },
+    { "id": "P3", "name": "Complete Visit",     "diagram": "SD" },
+    { "id": "P4", "name": "Write Prescription", "diagram": "SD" },
+    { "id": "P5", "name": "Issue Invoice",      "diagram": "SD" },
+    { "id": "P6", "name": "Pay Invoice",        "diagram": "SD2" },
+    { "id": "P7", "name": "Cancel Appointment", "diagram": "SD" }
+  ],
+  "links": [
+    { "id": "L1",  "type": "agent",        "from": "O1", "to": "P1" },
+    { "id": "L2",  "type": "result",       "from": "P1", "to": "O3" },
+    { "id": "L3",  "type": "agent",        "from": "O2", "to": "P2" },
+    { "id": "L4",  "type": "state-change", "from": "O3.Requested", "to": "O3.Confirmed", "via": "P2" },
+    { "id": "L5",  "type": "agent",        "from": "O2", "to": "P3" },
+    { "id": "L6",  "type": "state-change", "from": "O3.Confirmed", "to": "O3.Completed", "via": "P3" },
+    { "id": "L7",  "type": "result",       "from": "P4", "to": "O4" },
+    { "id": "L8",  "type": "result",       "from": "P5", "to": "O5" },
+    { "id": "L9",  "type": "consumption",  "from": "O6", "to": "P6" },
+    { "id": "L10", "type": "state-change", "from": "O5.Unpaid", "to": "O5.Paid", "via": "P6" },
+    { "id": "L11", "type": "state-change", "from": "O3.Requested", "to": "O3.Cancelled", "via": "P7" },
+    { "id": "L12", "type": "aggregation",  "from": "O3", "to": "O4" }
+  ]
+}

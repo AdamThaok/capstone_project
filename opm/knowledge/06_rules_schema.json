@@ -1,0 +1,346 @@
+{
+  "schema_name": "opm_rules_schema",
+  "schema_version": "1.0-phase1",
+  "source_priority": [
+    "ISO OPM standard (ISO/PDPAS 19450, 2014 draft of ISO/PAS 19450)",
+    "Dov Dori founder methodology (Dori 2002, Object-Process Methodology)",
+    "OPM language/book material (Dori 2002 front-matter summary tables)"
+  ],
+  "opm_elements": {
+    "object": {
+      "definition": "Model element representing a thing that does or might exist physically or informatically; persistent existence; remains in its current implicit or explicit state until a process acts on it.",
+      "source_reference": "ISO 19450 3.39; 7.1.1 para 564-569; Dori 2002 sec 4.4",
+      "allowed_relations": [
+        "source of: consumption, agent, instrument, condition(any incoming kind), event(any incoming kind), effect(input side)",
+        "target of: result, effect(output side)",
+        "structural with other objects: aggregation, exhibition, generalization, instantiation, tagged",
+        "exhibition with a process (object as attribute of a process, or process as operation of an object)",
+        "owner of states"
+      ],
+      "forbidden_relations": [
+        "procedural link to another object (procedural links connect object<->process only, except process-process invocation/exception)",
+        "tagged/aggregation/generalization/instantiation structural link to a process",
+        "being 'affected' if stateless (stateless objects can only be created or consumed; ISO 3.3 NOTE)"
+      ],
+      "validation_rules": [
+        "OBJ-1: every object has a unique identifying name in the model (ISO 6.2.2 para 483-485)",
+        "OBJ-2: name is a noun phrase, bold, capitalized per word in OPL (ISO 7.1.2)",
+        "OBJ-3: generic properties Perseverance=static, Essence in {physical, informatical}, Affiliation in {systemic, environmental} (ISO 7.3.3)",
+        "OBJ-4: if stateful, the state set is explicit; at most one default state; 0+ initial, 0+ final states (ISO 7.3.5.3)"
+      ],
+      "software_hints": [
+        "LATER PHASE ONLY: candidate entity/class/resource; physical objects may map to monitored assets rather than data; informatical objects to data structures"
+      ]
+    },
+    "process": {
+      "definition": "Transformation of one or more objects: generation, effect (state change), or consumption; has positive time duration; cannot exist in isolation from objects.",
+      "source_reference": "ISO 19450 3.58; 7.2.1 para 579-584; 6.2.3 para 495-498; Dori 2002 sec 4.4",
+      "allowed_relations": [
+        "target of: consumption, agent, instrument, condition, event links (from objects/states)",
+        "source of: result, effect(output side)",
+        "invocation/exception links with other processes",
+        "structural with other processes: aggregation, exhibition, generalization, instantiation, tagged",
+        "exhibition with objects (attributes of the process)"
+      ],
+      "forbidden_relations": [
+        "owning states (no process states; status is modelled by subprocesses; ISO 3.68 NOTE)",
+        "tagged/aggregation/generalization/instantiation structural link to an object",
+        "existing without at least one transforming link to an object or state (ISO 8.1.2 para 734)"
+      ],
+      "validation_rules": [
+        "PRC-1: passes the object-process test: time association, verb association, transforms at least one object (ISO 7.3.2)",
+        "PRC-2: non-empty preprocess object set and non-empty postprocess object set (ISO 8.2.2 para 763, 768)",
+        "PRC-3: at a given abstraction level, each linked object/state has exactly one procedural link and one role w.r.t. this process (ISO 8.1.2)",
+        "PRC-4: name preferably a gerund; bold, capitalized per word in OPL (Dori front matter; ISO B.6.3)"
+      ],
+      "software_hints": [
+        "LATER PHASE ONLY: candidate operation/service/workflow step with explicit pre/postconditions and duration; NOT automatically an API endpoint"
+      ]
+    },
+    "state": {
+      "definition": "Possible situation or position of an object; meaningful only within its owning object; a value is a state of an attribute.",
+      "source_reference": "ISO 19450 3.68; 7.3.5; 10.3.3.2.1 para 1638; Dori 2002 sec 5/12.4",
+      "allowed_relations": [
+        "source of: state-specified consumption, state-specified agent, state-specified instrument, condition state-specified links, state-specified event links, effect input link",
+        "target of: state-specified result, effect output link",
+        "state-specified tagged structural links (ISO 10.4.2)",
+        "value role when the owning object is an attribute"
+      ],
+      "forbidden_relations": [
+        "existence outside an owning object",
+        "belonging to a process",
+        "being source/target of fundamental structural relations on its own (aggregation/generalization/instantiation between states are not defined in the sources)"
+      ],
+      "validation_rules": [
+        "STA-1: every state belongs to exactly one object (ISO 7.3.5.1 para 668)",
+        "STA-2: label bold, lowercase in OPL (ISO 7.3.5.2 para 678)",
+        "STA-3: at most one default state per object; initial/final markers use correct notation (ISO 7.3.5.3-7.3.5.4)",
+        "STA-4: any state referenced by a link is a member of the owning object's permissible state set"
+      ],
+      "software_hints": [
+        "LATER PHASE ONLY: candidate status value / lifecycle stage with transition table derived ONLY from effect links; NOT automatically a database column"
+      ]
+    }
+  },
+  "links": {
+    "structural": [
+      {
+        "name": "aggregation-participation",
+        "definition": "Refineable (whole) aggregates one or more refinees (parts).",
+        "source_type": "object|process (whole)",
+        "target_type": "same Perseverance as source (parts)",
+        "meaning": "whole-part static relation",
+        "graphical_notation": "solid black triangle, apex to whole, base to parts; incompleteness bar variant",
+        "opl_template": "Whole consists of Part1, Part2, ..., and Partn.",
+        "validation_rules": [
+          "whole and parts all objects or all processes (ISO 10.3.1 para 1542)",
+          "incomplete part collections must use the 'at least one other part' form (ISO para 1570)"
+        ],
+        "software_hints": ["composition/containment; deferred"],
+        "source_reference": "ISO 10.3.2",
+        "assumption": false
+      },
+      {
+        "name": "exhibition-characterization",
+        "definition": "Refineable (exhibitor) exhibits features (attributes = object features, operations = process features) that characterize it.",
+        "source_type": "object|process (exhibitor)",
+        "target_type": "object (attribute) | process (operation)",
+        "meaning": "thing-characteristic static relation; only structural relation allowed across the object-process boundary",
+        "graphical_notation": "small filled triangle inside larger empty triangle, apex to exhibitor",
+        "opl_template": "Exhibitor exhibits Attribute1, ..., and Attributen, as well as Operation1, ..., Operationm.",
+        "validation_rules": [
+          "attribute is an object; operation is a process (ISO 10.3.3.1 para 1592)",
+          "object exhibitor lists attributes before operations; process exhibitor lists operations first (ISO para 1610)",
+          "attribute states are its values; instance values must fall in class value range (ISO 10.3.5.1 para 1750)"
+        ],
+        "software_hints": ["fields/properties and methods of the owning concept; deferred"],
+        "source_reference": "ISO 10.3.3",
+        "assumption": false
+      },
+      {
+        "name": "generalization-specialization",
+        "definition": "Refineable (general) generalizes refinees (specializations), which inherit its parts, features, tagged structural links, and procedural links.",
+        "source_type": "object|process (general)",
+        "target_type": "same Perseverance as source (specializations)",
+        "meaning": "is-a / inheritance static relation; multiple inheritance allowed",
+        "graphical_notation": "empty triangle, apex to general",
+        "opl_template": "Specialization1, Specialization2, ..., and Specializationn are General. (single: Specialization is a General.)",
+        "validation_rules": [
+          "general and specializations share Perseverance (ISO 10.3.4.1 para 1655)",
+          "inheritance covers parts, features, tagged structural links, procedural links (ISO 10.3.4.2 para 1683-1688)",
+          "discriminating attribute values constrain specializations (ISO 10.3.4.3)"
+        ],
+        "software_hints": ["subtype/taxonomy; discriminator value; deferred"],
+        "source_reference": "ISO 10.3.4",
+        "assumption": false
+      },
+      {
+        "name": "classification-instantiation",
+        "definition": "Refineable (class) classifies refinees (instances) created by providing explicit values for the class pattern.",
+        "source_type": "object class | process class",
+        "target_type": "instance(s) of the same kind",
+        "meaning": "class-instance static relation",
+        "graphical_notation": "small filled circle inside empty triangle, apex to class",
+        "opl_template": "Instance is an instance of Class. (plural: Instance1, ..., and Instancen are instances of Class.)",
+        "validation_rules": [
+          "instance attribute values within class value specification (ISO 10.3.5.1 para 1750-1752)",
+          "no complete/incomplete collection distinction (ISO NOTE 3 para 1764)",
+          "instantiation does not form hierarchies (Dori front matter; assumption w.r.t. ISO)"
+        ],
+        "software_hints": ["instances/configuration/fixtures; deferred"],
+        "source_reference": "ISO 10.3.5; Dori 2002 front matter",
+        "assumption": false
+      },
+      {
+        "name": "tagged structural link (unidirectional|null|bidirectional|reciprocal)",
+        "definition": "User-defined static relation between two objects or two processes, with modeller-supplied tag text.",
+        "source_type": "object|process",
+        "target_type": "same kind as source",
+        "meaning": "any static association not covered by the four fundamental relations",
+        "graphical_notation": "open-arrowhead arrow (uni); harpoon heads both ends (bi); tag annotations",
+        "opl_template": "Source tag Destination. | Source relates to Destination. | A and B are reciprocity-tag. | A and B are related.",
+        "validation_rules": [
+          "never object<->process (ISO 10.1 para 1467-1469)",
+          "bidirectional tagged emits one sentence per direction (ISO 10.2.3 para 1499)"
+        ],
+        "software_hints": ["named association/reference; deferred"],
+        "source_reference": "ISO 10.2",
+        "assumption": false
+      }
+    ],
+    "procedural": [
+      {
+        "name": "consumption link",
+        "definition": "Transforming link: the process consumes (destroys, eliminates) the consumee.",
+        "source_type": "object | object state (state-specified)",
+        "target_type": "process",
+        "meaning": "consumee existence (possibly at state) is precondition; object eliminated on activation; preprocess set only",
+        "graphical_notation": "closed-arrowhead arrow from consumee (or its state) to process",
+        "opl_template": "Processing consumes Consumee. | Process consumes specified-state Object.",
+        "validation_rules": [
+          "wait semantics unless c/e modifier",
+          "object cannot also be resultee of the same process (fact consistency ISO 14.2.3)",
+          "optional rate property + quantity attribute for gradual consumption (ISO 9.1.2 para 818-821)"
+        ],
+        "software_hints": ["input consumed/removed by operation; deferred"],
+        "source_reference": "ISO 9.1.2; 9.3.1; Dori 5.2.7",
+        "assumption": false
+      },
+      {
+        "name": "result link",
+        "definition": "Transforming link: the process creates (generates, yields) the resultee.",
+        "source_type": "process",
+        "target_type": "object | object state (state-specified)",
+        "meaning": "resultee creation is postcondition on completion; postprocess set only",
+        "graphical_notation": "closed-arrowhead arrow from process to resultee (or its state)",
+        "opl_template": "Processing yields Resultee. | Process yields specified-state Object.",
+        "validation_rules": [
+          "no event/condition control modifier on result links (ISO 8.2.3 NOTE 1)",
+          "if resultee has an initial state, attach the link to the object, not the initial state (ISO 9.3.2 para 954)"
+        ],
+        "software_hints": ["output/record creation; deferred"],
+        "source_reference": "ISO 9.1.3; 9.3.2; Dori 5.2.7",
+        "assumption": false
+      },
+      {
+        "name": "effect link",
+        "definition": "Transforming link: the process affects the affectee, changing its state (unspecified or state-specified).",
+        "source_type": "object or its input state (input side); process (output side)",
+        "target_type": "process (input side); object or its output state (output side)",
+        "meaning": "state change; affectee in pre- and postprocess sets; in transition during performance",
+        "graphical_notation": "bidirectional double-arrowhead arrow; state-specified variants split into input and output links",
+        "opl_template": "Processing affects Affectee. | Process changes Object from s1 to s2. | Process changes Object from s1. | Process changes Object to s2.",
+        "validation_rules": [
+          "affectee must be stateful (ISO 3.3 NOTE; 3.15 NOTE)",
+          "input-specified form requires default state or state probability distribution (ISO 9.3.3.3)",
+          "'affects' is a legal abstraction of 'changes from/to' (ISO 14.2.3 EXAMPLE)"
+        ],
+        "software_hints": ["update/status transition; deferred"],
+        "source_reference": "ISO 9.1.4; 9.3.3; Dori 5.2.7",
+        "assumption": false
+      },
+      {
+        "name": "agent link",
+        "definition": "Enabling link from a human (or human group) enabler to the process it enables and controls.",
+        "source_type": "object in agent role | its state (state-specified)",
+        "target_type": "process",
+        "meaning": "necessary for activation and throughout performance; not transformed; disappearance aborts the process",
+        "graphical_notation": "line ending in filled circle (black lollipop) at process",
+        "opl_template": "Agent handles Processing. | Specified-state Agent handles Processing.",
+        "validation_rules": [
+          "agent is human/group (ISO 3.4); organizations admissible per Dori 5.2.4",
+          "agent unchanged by the process, else remodel as transformee (Dori 5.2.4)",
+          "enabler present throughout performance (ISO 9.2.1 para 862)"
+        ],
+        "software_hints": ["human task/role/permission; UI touchpoint; deferred"],
+        "source_reference": "ISO 9.2.2; 9.4.1; Dori 5.2.4",
+        "assumption": false
+      },
+      {
+        "name": "instrument link",
+        "definition": "Enabling link from a non-human enabler required for the process to occur.",
+        "source_type": "object in instrument role | its state (state-specified)",
+        "target_type": "process",
+        "meaning": "required, neither consumed nor changed; disappearance aborts the process",
+        "graphical_notation": "line ending in empty circle (white lollipop) at process",
+        "opl_template": "Processing requires Instrument. | Processing requires specified-state Instrument.",
+        "validation_rules": [
+          "instrument non-human (ISO 3.30)",
+          "unchanged by the process; if changed, remodel as affectee (Dori 5.2.5)",
+          "present throughout performance (ISO 9.2.1)"
+        ],
+        "software_hints": ["dependency/resource/read-only input; deferred"],
+        "source_reference": "ISO 9.2.3; 9.4.2; Dori 5.2.5",
+        "assumption": false
+      },
+      {
+        "name": "condition link (family: condition consumption|effect|agent|instrument, plain or state-specified)",
+        "definition": "Control link: an incoming transforming/enabling link annotated 'c', adding skip semantics - if the source object (at the specified state, if any) does not exist, the process is bypassed rather than waited for.",
+        "source_type": "object | object state",
+        "target_type": "process",
+        "meaning": "guard with bypass; skip semantics overrides wait semantics of co-occurring non-condition links",
+        "graphical_notation": "underlying link symbol with letter 'c' near the process end",
+        "opl_template": "Process occurs if Object exists|is state, in which case <consumption/effect clause>, otherwise Process is skipped. / Agent handles Process if Agent exists|is state, else Process is skipped.",
+        "validation_rules": [
+          "no condition modifier on outgoing (result) links (ISO 8.2.3 NOTE 1)",
+          "referenced state must be a permissible state of the source object",
+          "skip overrides wait when both present (ISO 8.2.3 para 782-787)",
+          "disambiguate from state-specified (wait) links during import (conflict C-1)"
+        ],
+        "software_hints": ["if/else guard, bypass branch in workflow; deferred"],
+        "source_reference": "ISO 3.9; 8.2.3; 9.5.3; Dori 5.3.3",
+        "assumption": false
+      },
+      {
+        "name": "event link (family: consumption|effect|agent|instrument event, plain or state-specified)",
+        "definition": "Control link: an incoming link annotated 'e'; creation/appearance/state-entry of the source object initiates precondition evaluation of the process; the event is then lost.",
+        "source_type": "object | object state",
+        "target_type": "process",
+        "meaning": "initiator; couples triggering with the underlying transforming/enabling semantics",
+        "graphical_notation": "underlying link symbol with letter 'e' near the process end/arrowhead",
+        "opl_template": "Object initiates Process, which consumes|affects|requires Object. / Agent initiates and handles Process.",
+        "validation_rules": [
+          "no result event link (ISO 8.2.3 NOTE 1)",
+          "event lost after evaluation regardless of outcome (ISO 9.5.1 para 1089)"
+        ],
+        "software_hints": ["trigger/listener/queue message; deferred"],
+        "source_reference": "ISO 9.5.2",
+        "assumption": false
+      },
+      {
+        "name": "invocation link (incl. self-invocation)",
+        "definition": "Control link between two processes: completion of the source immediately initiates the destination; implies a transient object created and immediately consumed.",
+        "source_type": "process",
+        "target_type": "process (possibly the same process)",
+        "meaning": "direct process-to-process triggering",
+        "graphical_notation": "jagged lightning arrow with closed arrowhead at invoked process",
+        "opl_template": "Invoking-process invokes invoked-process. | Invoking-process invokes itself.",
+        "validation_rules": [
+          "both ends are processes",
+          "invocation occurs only on successful completion (ISO 9.5.2.5.1 NOTE 1)"
+        ],
+        "software_hints": ["direct call/chained step; deferred"],
+        "source_reference": "ISO 9.5.2.5",
+        "assumption": false
+      },
+      {
+        "name": "overtime|undertime exception link",
+        "definition": "Control link from a process violating its duration bounds to an exception-handling process.",
+        "source_type": "process (with Maximal/Minimal Duration)",
+        "target_type": "process (handler)",
+        "meaning": "time-based exception routing",
+        "graphical_notation": "link with one (overtime) or two (undertime) short oblique bars near the handler",
+        "opl_template": "Overtime Handling Process occurs if duration of Source Process exceeds max-duration time-units. | Undertime Handling Process occurs if duration of Source Process falls short of min-duration time-units.",
+        "validation_rules": [
+          "source process must declare the relevant duration bound (ISO 9.5.4.1)"
+        ],
+        "software_hints": ["timeout/SLA handler; deferred"],
+        "source_reference": "ISO 9.5.4",
+        "assumption": false
+      }
+    ]
+  },
+  "opl_templates_note": "Full template inventory with examples and statuses is in 05_opl_grammar_templates.md (32 procedural + 15 structural + 6 thing/state templates, all ISO-confirmed unless marked).",
+  "validation_rules": [
+    {"rule_id": "VR-01", "description": "Every model element is a thing (object|process), a state owned by an object, or a link; nothing else.", "severity": "error", "source_reference": "ISO 3.16, 3.76, 6.2.2"},
+    {"rule_id": "VR-02", "description": "Every link is classified structural or procedural; control links are procedural.", "severity": "error", "source_reference": "ISO 6.2.4, 8.1.1"},
+    {"rule_id": "VR-03", "description": "Structural links connect like-kind things only, except exhibition-characterization.", "severity": "error", "source_reference": "ISO 10.1 para 1467-1469"},
+    {"rule_id": "VR-04", "description": "Procedural links connect an object/state with a process; only invocation/exception connect two processes.", "severity": "error", "source_reference": "ISO 3.57, 9.5.2.5, 9.5.4"},
+    {"rule_id": "VR-05", "description": "Procedural link uniqueness: one procedural link and one role per object(or state)-process pair at a given abstraction.", "severity": "error", "source_reference": "ISO 8.1.2"},
+    {"rule_id": "VR-06", "description": "Every process connects via a transforming link to >=1 object or state; pre- and postprocess sets non-empty.", "severity": "error", "source_reference": "ISO 8.1.2 para 734; 8.2.2"},
+    {"rule_id": "VR-07", "description": "Affectees must be stateful; stateless objects only created/consumed.", "severity": "error", "source_reference": "ISO 3.3 NOTE"},
+    {"rule_id": "VR-08", "description": "States referenced by any state-specified link belong to the linked object's permissible state set.", "severity": "error", "source_reference": "ISO 7.3.5.1; 9.3-9.4"},
+    {"rule_id": "VR-09", "description": "No result event or result condition links (no control modifiers on outgoing links).", "severity": "error", "source_reference": "ISO 8.2.3 NOTE 1"},
+    {"rule_id": "VR-10", "description": "Result link should not target an initial state of the resultee.", "severity": "warning", "source_reference": "ISO 9.3.2 para 954-958"},
+    {"rule_id": "VR-11", "description": "Aggregation/generalization preserve Perseverance between refineable and refinees.", "severity": "error", "source_reference": "ISO 10.3.1 para 1542; 10.3.4.1 para 1655"},
+    {"rule_id": "VR-12", "description": "Every OPM construct (link + endpoints) has exactly one corresponding OPL sentence; OPD and OPL are equivalent.", "severity": "error", "source_reference": "ISO 6.2.1; 6.2.2 para 485-486"},
+    {"rule_id": "VR-13", "description": "Fact consistency: no OPD may contradict a model fact of any other OPD in the model; refinement is not contradiction.", "severity": "error", "source_reference": "ISO 14.2.3"},
+    {"rule_id": "VR-14", "description": "At most one default state per object; instance attribute values within class value ranges.", "severity": "error", "source_reference": "ISO 7.3.5.3; 10.3.5.1"},
+    {"rule_id": "VR-15", "description": "Input-specified effect links require a default state or state probability distribution on the affectee.", "severity": "error", "source_reference": "ISO 9.3.3.3"},
+    {"rule_id": "VR-16", "description": "Same-kind links at one process not sharing a point = AND; sharing a common point = XOR/OR fan; fan semantics must be declared.", "severity": "warning", "source_reference": "ISO 12.1-12.2"},
+    {"rule_id": "VR-17", "description": "When importing informal 'occurs if in state' requirements, modeller intent (wait vs skip) must be resolved; default to state-specified (wait) and log an assumption.", "severity": "assumption", "source_reference": "ISO 8.2.3 vs Dori 5.3.3 (conflict C-1); the default choice is this KB's convention, not a source rule"},
+    {"rule_id": "VR-18", "description": "Abstraction link conflicts resolved by the semantic strength order of ISO 14.2.4.1.4.", "severity": "warning", "source_reference": "ISO 14.2.4.1.4"},
+    {"rule_id": "VR-19", "description": "Object-process test applied to every thing name whose kind is doubtful; nouns default to objects.", "severity": "warning", "source_reference": "ISO 7.3.2"},
+    {"rule_id": "VR-20", "description": "No software artifact generation before all error-severity checks pass and all assumptions are logged.", "severity": "error", "source_reference": "Phase-1 mandate (user constraint); consistent with ISO 6.2.6 conceptual/runtime separation"}
+  ]
+}

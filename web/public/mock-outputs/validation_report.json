@@ -1,0 +1,60 @@
+{
+  "metadata": {
+    "validator": "AI Agent v0.1",
+    "validatedAt": "2026-04-18T11:00:09Z",
+    "iterations": 2
+  },
+  "buildChecks": [
+    { "name": "backend: pip install",        "status": "pass", "durationMs": 4210 },
+    { "name": "backend: pytest",             "status": "pass", "durationMs": 1872, "tests": 14 },
+    { "name": "frontend: npm install",       "status": "pass", "durationMs": 8930 },
+    { "name": "frontend: tsc --noEmit",      "status": "pass", "durationMs": 2310 },
+    { "name": "frontend: vitest",            "status": "pass", "durationMs": 1205, "tests": 9 },
+    { "name": "docker compose build",        "status": "pass", "durationMs": 12480 }
+  ],
+  "connectivityChecks": [
+    { "name": "firestore emulator handshake", "status": "pass" },
+    { "name": "backend -> firestore",         "status": "pass" },
+    { "name": "frontend -> backend /health",  "status": "pass" },
+    { "name": "frontend -> firestore",        "status": "pass" }
+  ],
+  "coverageVerification": {
+    "opmElements": 16,
+    "codeArtifacts": 16,
+    "coverage": "100%",
+    "mapping": [
+      { "opmId": "O1", "artifact": "backend/app/models/customer.py"            },
+      { "opmId": "O2", "artifact": "backend/app/models/order.py"               },
+      { "opmId": "O3", "artifact": "backend/app/models/item.py"                },
+      { "opmId": "O4", "artifact": "backend/app/services/transitions.py:42-58" },
+      { "opmId": "P1", "artifact": "backend/app/routes/orders.py:POST /orders" },
+      { "opmId": "P2", "artifact": "backend/app/routes/orders.py:DELETE /orders/:id" },
+      { "opmId": "P3", "artifact": "backend/app/routes/orders.py:POST /orders/:id/pay" },
+      { "opmId": "P4", "artifact": "backend/app/routes/orders.py:POST /orders/:id/ship" },
+      { "opmId": "L1", "artifact": "firebase/firestore.rules:14 (customer auth)" },
+      { "opmId": "L3", "artifact": "backend/app/models/order.py:items field" },
+      { "opmId": "L5", "artifact": "backend/app/services/transitions.py:pay()" },
+      { "opmId": "L6", "artifact": "backend/app/services/transitions.py:ship()" },
+      { "opmId": "L8", "artifact": "backend/app/services/transitions.py:cancel()" }
+    ]
+  },
+  "consistencyCheck": {
+    "driftDetected": false,
+    "issues": []
+  },
+  "refinementLog": [
+    {
+      "iteration": 1,
+      "issue": "P3 endpoint accepted Paid->Paid transition (no source state check)",
+      "fix": "Added source state validation in transitions.py pay()",
+      "resolved": true
+    },
+    {
+      "iteration": 2,
+      "issue": "frontend OrderDetail fetched /orders/:id before auth ready",
+      "fix": "Wrapped fetch in useEffect with auth.currentUser guard",
+      "resolved": true
+    }
+  ],
+  "finalStatus": "READY_FOR_DEPLOYMENT"
+}

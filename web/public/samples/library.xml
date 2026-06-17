@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sample OPM diagram in OPCloud-like XML.
+  Domain: Library management system.
+  Used by the metadata-driven pipeline as a stand-in for real OPCloud exports.
+-->
+<opmModel xmlns="http://www.opcloud.tech/opm" version="2.0">
+  <metadata>
+    <name>Library Management</name>
+    <author>Capstone Sample</author>
+    <standard>ISO 19450:2015</standard>
+  </metadata>
+
+  <diagrams>
+    <diagram id="SD"  name="System Diagram"                level="0"/>
+    <diagram id="SD1" name="Borrow Book (zoom-in)" level="1" parent="SD"/>
+    <diagram id="SD2" name="Return Book (zoom-in)" level="1" parent="SD"/>
+  </diagrams>
+
+  <objects>
+    <object id="O1" name="Member" kind="informatical"/>
+    <object id="O2" name="Book" kind="informatical">
+      <states>
+        <state name="Available"/>
+        <state name="Borrowed"/>
+        <state name="Reserved"/>
+        <state name="Lost"/>
+      </states>
+    </object>
+    <object id="O3" name="Loan" kind="informatical">
+      <states>
+        <state name="Active"/>
+        <state name="Returned"/>
+        <state name="Overdue"/>
+      </states>
+    </object>
+    <object id="O4" name="Reservation" kind="informatical">
+      <states>
+        <state name="Pending"/>
+        <state name="Fulfilled"/>
+        <state name="Cancelled"/>
+      </states>
+    </object>
+    <object id="O5" name="Fine" kind="informatical">
+      <states>
+        <state name="Unpaid"/>
+        <state name="Paid"/>
+      </states>
+    </object>
+  </objects>
+
+  <processes>
+    <process id="P1" name="Borrow Book"      diagram="SD"/>
+    <process id="P2" name="Return Book"      diagram="SD"/>
+    <process id="P3" name="Reserve Book"     diagram="SD"/>
+    <process id="P4" name="Cancel Reservation" diagram="SD"/>
+    <process id="P5" name="Issue Fine"       diagram="SD"/>
+    <process id="P6" name="Pay Fine"         diagram="SD"/>
+  </processes>
+
+  <links>
+    <!-- Borrow flow -->
+    <link id="L1"  type="agent"        from="O1" to="P1"/>
+    <link id="L2"  type="result"       from="P1" to="O3"/>
+    <link id="L3"  type="state-change" from="O2.Available" to="O2.Borrowed" via="P1"/>
+
+    <!-- Return flow -->
+    <link id="L4"  type="agent"        from="O1" to="P2"/>
+    <link id="L5"  type="state-change" from="O3.Active"    to="O3.Returned" via="P2"/>
+    <link id="L6"  type="state-change" from="O2.Borrowed"  to="O2.Available" via="P2"/>
+
+    <!-- Reservation flow -->
+    <link id="L7"  type="agent"        from="O1" to="P3"/>
+    <link id="L8"  type="result"       from="P3" to="O4"/>
+    <link id="L9"  type="state-change" from="O2.Available" to="O2.Reserved"  via="P3"/>
+    <link id="L10" type="agent"        from="O1" to="P4"/>
+    <link id="L11" type="state-change" from="O4.Pending"   to="O4.Cancelled" via="P4"/>
+
+    <!-- Fine flow -->
+    <link id="L12" type="condition"    from="O3.Overdue"  to="P5"/>
+    <link id="L13" type="result"       from="P5" to="O5"/>
+    <link id="L14" type="consumption"  from="O5" to="P6"/>
+    <link id="L15" type="state-change" from="O5.Unpaid"   to="O5.Paid" via="P6"/>
+
+    <!-- Aggregations -->
+    <link id="L16" type="aggregation"  from="O1" to="O3"/>
+    <link id="L17" type="aggregation"  from="O2" to="O3"/>
+  </links>
+</opmModel>

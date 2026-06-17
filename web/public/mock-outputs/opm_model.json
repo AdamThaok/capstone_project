@@ -1,0 +1,79 @@
+{
+  "metadata": {
+    "standard": "ISO 19450:2015",
+    "parser": "Hybrid Visual-Semantic v0.1",
+    "source": "demo-order-management.opx",
+    "parsedAt": "2026-04-18T11:00:00Z"
+  },
+  "diagrams": [
+    {
+      "id": "SD",
+      "name": "System Diagram",
+      "level": 0
+    },
+    {
+      "id": "SD1",
+      "name": "Place Order (zoom-in)",
+      "level": 1,
+      "parent": "SD"
+    }
+  ],
+  "objects": [
+    {
+      "id": "O1",
+      "name": "Customer",
+      "kind": "informatical",
+      "states": []
+    },
+    {
+      "id": "O2",
+      "name": "Order",
+      "kind": "informatical",
+      "states": ["Pending", "Paid", "Shipped", "Cancelled"]
+    },
+    {
+      "id": "O3",
+      "name": "Item",
+      "kind": "informatical",
+      "states": []
+    },
+    {
+      "id": "O4",
+      "name": "Payment",
+      "kind": "informatical",
+      "states": []
+    }
+  ],
+  "processes": [
+    {
+      "id": "P1",
+      "name": "Place Order",
+      "diagram": "SD"
+    },
+    {
+      "id": "P2",
+      "name": "Cancel Order",
+      "diagram": "SD"
+    },
+    {
+      "id": "P3",
+      "name": "Process Payment",
+      "diagram": "SD1"
+    },
+    {
+      "id": "P4",
+      "name": "Ship Order",
+      "diagram": "SD"
+    }
+  ],
+  "links": [
+    { "id": "L1", "type": "agent",        "from": "O1", "to": "P1" },
+    { "id": "L2", "type": "result",       "from": "P1", "to": "O2" },
+    { "id": "L3", "type": "aggregation",  "from": "O2", "to": "O3" },
+    { "id": "L4", "type": "consumption",  "from": "O4", "to": "P3" },
+    { "id": "L5", "type": "state-change", "from": "O2.Pending", "to": "O2.Paid", "via": "P3" },
+    { "id": "L6", "type": "state-change", "from": "O2.Paid",    "to": "O2.Shipped", "via": "P4" },
+    { "id": "L7", "type": "agent",        "from": "O1", "to": "P2" },
+    { "id": "L8", "type": "state-change", "from": "O2.Pending", "to": "O2.Cancelled", "via": "P2" }
+  ]
+}

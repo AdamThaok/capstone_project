@@ -1,0 +1,60 @@
+{
+  "root": "generated-project/",
+  "totalFiles": 28,
+  "totalLines": 1847,
+  "tree": [
+    {
+      "path": "backend/",
+      "children": [
+        { "path": "backend/app/main.py",              "lines": 42 },
+        { "path": "backend/app/deps.py",              "lines": 31 },
+        { "path": "backend/app/models/order.py",      "lines": 56 },
+        { "path": "backend/app/models/customer.py",   "lines": 28 },
+        { "path": "backend/app/models/item.py",       "lines": 34 },
+        { "path": "backend/app/routes/orders.py",     "lines": 124 },
+        { "path": "backend/app/routes/customers.py",  "lines": 48 },
+        { "path": "backend/app/services/firestore.py","lines": 78 },
+        { "path": "backend/app/services/transitions.py","lines": 95 },
+        { "path": "backend/requirements.txt",         "lines": 12 },
+        { "path": "backend/Dockerfile",               "lines": 18 }
+      ]
+    },
+    {
+      "path": "frontend/",
+      "children": [
+        { "path": "frontend/src/App.tsx",             "lines": 45 },
+        { "path": "frontend/src/pages/OrderList.tsx", "lines": 87 },
+        { "path": "frontend/src/pages/OrderDetail.tsx","lines": 134 },
+        { "path": "frontend/src/pages/NewOrder.tsx",  "lines": 156 },
+        { "path": "frontend/src/hooks/useOrders.ts",  "lines": 42 },
+        { "path": "frontend/src/lib/firebase.ts",     "lines": 29 },
+        { "path": "frontend/src/api/client.ts",       "lines": 38 },
+        { "path": "frontend/package.json",            "lines": 32 },
+        { "path": "frontend/Dockerfile",              "lines": 15 }
+      ]
+    },
+    {
+      "path": "firebase/",
+      "children": [
+        { "path": "firebase/firestore.rules",         "lines": 47 },
+        { "path": "firebase/firestore.indexes.json",  "lines": 23 },
+        { "path": "firebase/firebase.json",           "lines": 18 }
+      ]
+    },
+    {
+      "path": "docker-compose.yml",                   "lines": 38
+    },
+    {
+      "path": "README.md",                            "lines": 156
+    },
+    {
+      "path": "TRACEABILITY.md",                      "lines": 189
+    },
+    {
+      "path": ".env.example",                         "lines": 12
+    },
+    {
+      "path": ".gitignore",                           "lines": 18
+    }
+  ]
+}
