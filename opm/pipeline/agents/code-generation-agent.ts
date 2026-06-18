@@ -20,7 +20,7 @@ import {
     askJson as claudeAskJson,
     CODEGEN_MODEL,
 } from "@/opm/pipeline/llm/claude";
-import type { CodeArtifact, FileSpec, TestReport, ReflectionNote, AttemptRecord, AgentIR } from "./types";
+import type { CodeArtifact, FileSpec, TestReport, ReflectionNote, AttemptRecord, AgentIR, Failure } from "./types";
 
 type Progress = (msg: string) => void;
 
@@ -47,36 +47,167 @@ OUTPUT FORMAT — use EXACTLY this, no JSON, no markdown fences:
 const LAYERS: Layer[] = [
     {
         name: "Data",
-        files: ["backend/models.py", "backend/schemas.py"],
-        instruction: "SQLAlchemy models + Pydantic schemas — ONE consistent set, no duplicates.",
+        files: ["backend/models.py", "backend/schemas.py", "backend/database.py"],
+        instruction:
+            "SQLAlchemy models + Pydantic schemas + the DB foundation, as ONE consistent set. " +
+            "models.py defines the SINGLE declarative Base. database.py imports THAT same Base and " +
+            "defines the async engine, an async session factory named EXACTLY `async_session` (via " +
+            "async_sessionmaker — NOT `AsyncSessionLocal` or any other name), and an async get_db() " +
+            "dependency — so later layers can do `from backend.database import get_db, async_session`. " +
+            "No duplicates, no second declarative_base(). " +
+            "database.py MUST ALSO define an idempotent async seed_db(session): at the top SELECT one " +
+            "row from the first table and return early if any exists; insert rows respecting FK order " +
+            "(parents before children); commit at the end. seed_db inserts at least 2 rows for EVERY ORM " +
+            "model in models.py and at least one row for EACH value of every Enum column. CRITICAL for " +
+            "dropdowns: pick ONE primary demo entity (the first entity the UI links to) and give it the " +
+            "FULL set of related rows every form on it needs — for each distinct value any screen filters " +
+            "a <select> on, attach at least one matching row to THAT demo entity (e.g. the demo child owns " +
+            "one Diagnosis of EACH DiagnosisType the form selects, including FetalGrowthIndication), not " +
+            "one-per-different-entity. Also seed lookup/reference entities so their GLOBAL list endpoint is " +
+            "non-empty independent of any parent. " +
+            "seed_db MUST be `async def seed_db(session)` taking that AsyncSession (the entry layer calls " +
+            "`async with async_session() as s: await seed_db(s)`). The module's PUBLIC names are EXACTLY: " +
+            "Base, engine, async_session, get_db, seed_db — later layers import these verbatim, so do not " +
+            "rename them.",
     },
     {
         name: "API",
         files: ["backend/routers.py"],
-        instruction: "All FastAPI endpoints in one router module, using ONLY the models + schemas already written.",
+        instruction:
+            "All FastAPI endpoints in one router module, using ONLY the models + schemas already " +
+            "written, and importing get_db from backend.database (already written) for the DB session " +
+            "dependency: `session: AsyncSession = Depends(get_db)`. NEVER stub the session " +
+            "(no Depends(lambda: None)) — the real get_db already exists. " +
+            "For EVERY entity whose id is consumed by another endpoint (any `*_id` request field, including " +
+            "process/transition endpoints) OR that any frontend selection field must enumerate, expose a " +
+            "GLOBAL list endpoint `@router.get('/<plural>', response_model=List[<Entity>Response])` returning " +
+            "ALL rows (select(<Entity>) with no parent filter) — in ADDITION to any parent-nested getter; a " +
+            "child-scoped read does NOT satisfy this. When a backend lookup validates a value by a " +
+            "discriminator (WHERE type==X with no owner scope), expose a matching unscoped GET /<plural>?type=X. " +
+            "SCHEMA CONTRACT (mandatory): request bodies use the *Create/*Update schemas; ALL responses use the " +
+            "*Response schemas. Every list endpoint: response_model=List[<Entity>Response]; every GET/{id}: " +
+            "response_model=<Entity>Response. NEVER use a *Create/*Update schema as a response_model, NEVER return " +
+            "a hand-built dict where a *Response exists — return the ORM object and let FastAPI serialize it. " +
+            "Import every *Response you reference. " +
+            "PROCESS ENDPOINTS: bind a dedicated typed Pydantic request schema (e.g. `body: DiagnoseAndTreatRequest`) " +
+            "— NEVER accept a bare `dict` or read fields via `.get()`. Let Pydantic enforce required fields; do NOT " +
+            "re-check presence with `if not all([...])` (it wrongly rejects a legitimate 0/False) — if you must, " +
+            "check `is None` per field. " +
+            "NULL-SAFETY: any model field declared nullable is None until set; before any arithmetic/comparison " +
+            "(<, >, etc.) on such a DB-sourced field, guard `if x is None:` and raise HTTPException(422, " +
+            "detail='<field> not set') or skip the rule. " +
+            "CRUD SCOPE: for every entity a USER MUST SUPPLY as input to a process (agents, instruments, " +
+            "consumee/input objects), emit BOTH POST /<plural> (body=*Create) AND GET /<plural> (list, " +
+            "response_model=List[*Response]). Do NOT emit create/update/delete for objects a process YIELDS " +
+            "(resultees) — those are produced by their process endpoint only.",
     },
     {
         name: "Backend entry",
-        files: ["backend/main.py", "backend/database.py", "backend/requirements.txt", "backend/Dockerfile"],
-        instruction: "Wire the router(s), CORS, and create tables on startup. requirements.txt must list every imported package.",
+        files: ["backend/main.py", "backend/requirements.txt", "backend/Dockerfile"],
+        instruction:
+            "main.py wires the router(s) + CORS, imports engine/Base from backend.database (already " +
+            "written), and creates tables on startup (Base.metadata.create_all). Do NOT redefine the " +
+            "engine, Base, or get_db. requirements.txt must list every imported package (include " +
+            "aiosqlite AND asyncpg). " +
+            "main.py MUST import seed_db from backend.database and, inside the FastAPI lifespan/startup handler, " +
+            "call it in a session immediately AFTER Base.metadata.create_all and BEFORE serving " +
+            "(async with async_session() as s: await seed_db(s)). " +
+            "LAUNCH MUST MATCH IMPORTS: the backend uses package-relative imports (from backend.x), so it runs " +
+            "ONLY from the repo root as `uvicorn backend.main:app`. The Dockerfile MUST set WORKDIR /app, " +
+            "`COPY backend/ ./backend/` (preserve the package dir — NEVER `COPY backend/ .`), copy requirements " +
+            "from ./backend/requirements.txt, and CMD running `python -m uvicorn backend.main:app --host 0.0.0.0 " +
+            "--port 8000`. NEVER generate `cd backend && uvicorn main:app`. The EXPOSE/CMD port MUST equal the " +
+            "docker-compose.yml port.",
     },
     {
         name: "Frontend",
-        files: ["frontend/src/main.tsx", "frontend/src/App.tsx", "frontend/src/api.ts", "frontend/index.html"],
-        instruction: "Plus ONE page component per main entity under frontend/src/pages/. Call EXACTLY the routes already defined above — match every path + field name.",
+        files: ["frontend/src/main.tsx", "frontend/src/App.tsx", "frontend/src/api.ts", "frontend/index.html", "frontend/src/index.css"],
+        instruction:
+            "Plus ONE page component per main entity under frontend/src/pages/. Call EXACTLY the routes already defined above — match every path + field name. " +
+            "ROUTING: if you use client-side routing, use react-router-dom for ALL navigation (Router/Routes/Route/Link/useNavigate/useParams). " +
+            "SELF-CONTAINED IMPORTS: every relative import in main.tsx/App.tsx/pages MUST be a file you also emit in THIS layer — never import a file you do not generate. main.tsx MUST `import './index.css'` and you MUST emit frontend/src/index.css with real styles (semantic selectors .header/.nav/.container/.card/.table/.loading/.error/.form-group plus base body styles) for the exact className values your components use. Pick ONE styling approach: do NOT emit @tailwind directives unless your JSX uses Tailwind utility classes — keep index.css and JSX in agreement. " +
+            "FORM REFERENCE FIELDS (mandatory): any form field whose submitted payload key ends in `_id` (it carries another entity's identifier) MUST render as a <select> bound to options loaded in the page's load effect — NEVER a free-text/paste-the-UUID <input>. In the page's useEffect/Promise.all, fetch the candidate records via the matching api.ts function for EVERY such field and store them in an option-state array; render one <option> per record using its id as value and a human-readable label (name, else id). Do not declare an option-state array or interface you never fetch into. " +
+            "DROPDOWN OPTION SOURCE: a reference/foreign-key <select> MUST source its options from the TOP-LEVEL listing endpoint for that target entity (e.g. GET /diagnoses), matching how the backend validates the submitted id — NEVER from an owner/child-scoped or already-filtered endpoint. Do NOT add a client-side .filter() on a discriminator (e.g. d.type==='X') unless you call a dedicated listing endpoint guaranteed to return rows with that value (e.g. GET /diagnoses?type=X). Assume a freshly-seeded DB: any required <select> that could render zero options is a defect — surface a visible 'No options available' empty-state and disable the field instead of a silently empty required dropdown. " +
+            "RESPONSE NORMALIZATION: list endpoints may return either an array or a single object; normalize with `Array.isArray(res.data) ? res.data : res.data ? [res.data] : []` before mapping. " +
+            "CREATE SURFACES: for every entity that is selected in any form, also emit a Create page (route /<plural>/new) that POSTs a new row via api.ts, add a 'New' link on that entity's list page, register the route in App.tsx, and add a create() method to that entity's api.ts object. Never ship a list page whose only states are a table and an empty-state with no way to add a record.",
     },
     {
         name: "Config",
         files: [
             "frontend/package.json", "frontend/vite.config.ts", "frontend/tsconfig.json",
-            "frontend/postcss.config.js", "frontend/tailwind.config.js",
-            "docker-compose.yml", "README.md", "TRACEABILITY.md",
+            "frontend/postcss.config.js", "frontend/tailwind.config.js", "frontend/Dockerfile",
+            "docker-compose.yml", "railway.json", "README.md", "TRACEABILITY.md",
         ],
         instruction:
-            "package.json MUST declare every dependency the frontend imports (react, axios, AND tailwindcss/postcss/autoprefixer if used). " +
+            "package.json dependencies MUST cover EVERY package imported by the frontend files — never a hardcoded list. Always include react, react-dom, axios; include react-router-dom whenever any page or App.tsx uses routing (useParams/useNavigate/Link/Routes); include tailwindcss/postcss/autoprefixer in devDependencies if used. Keep scripts exactly {\"dev\":\"vite\",\"build\":\"vite build\",\"preview\":\"vite preview\"}. " +
+            "frontend/tsconfig.json MUST be a valid Vite+React config that passes `tsc --noEmit`: use ONLY real tsc options (the field is useDefineForClassFields, NOT useDefineForModule); whenever resolveJsonModule is enabled with module:ESNext, set moduleResolution to 'Bundler' (never leave it defaulting to classic); set jsx:'react-jsx'. " +
+            "Make tsconfig.json SELF-CONTAINED: do NOT use `references`, project references, or `composite` pointing at a tsconfig.node.json (or ANY file) you do not also emit — keep all options inline in the single tsconfig.json and add vite.config.ts to `include`. A dangling reference to a non-emitted file fails `vite build`. " +
+            "docker-compose.yml may reference ONLY Dockerfiles you also emit. Emit frontend/Dockerfile: FROM node:20-alpine, WORKDIR /app, COPY package*.json ./ (context-relative — build context is ./frontend, do NOT prefix with frontend/), RUN npm install, COPY . ., RUN npm run build, CMD running `npm run preview -- --host 0.0.0.0 --port 5173`, EXPOSE 5173. " +
+            "Emit railway.json at repo root (two services + one Postgres plugin) — the brief mandates it. " +
+            "README.md MUST: (1) include a 'Local Development' section with EXACT commands run from the PROJECT ROOT — backend `uvicorn backend.main:app --reload`, frontend `cd frontend && npm install && npm run dev`; (2) in 'API Endpoints' list ONLY routes that appear in backend/routers.py; (3) in 'Project Structure' list ONLY files emitted by this build. " +
             "TRACEABILITY.md MUST list EVERY OPM id from the brief — every object id (O1..On) and every process id (P1..Pn) — each on a line mapping it to the file that implements it (e.g. `- O4 Child -> backend/models.py`).",
     },
 ];
+
+// Deterministic safety net: make frontend/package.json declare every npm package the
+// emitted frontend code actually imports. The Config layer is *asked* to derive deps
+// from imports, but a single miss (e.g. react-router-dom) builds to a white screen.
+// So after generation we scan the real imports and union in the ones we know.
+const FRONTEND_DEP_VERSIONS: Record<string, string> = {
+    "react": "^18",
+    "react-dom": "^18",
+    "axios": "^1",
+    "react-router-dom": "^6",
+    "@tanstack/react-query": "^5",
+    "zustand": "^4",
+    "clsx": "^2",
+};
+
+// Bare (non-relative) import roots in a JS/TS source: "react-dom/client" -> "react-dom",
+// "@scope/pkg/sub" -> "@scope/pkg". Relative ("./", "/") specifiers are ignored.
+function bareImportRoots(content: string): string[] {
+    const roots = new Set<string>();
+    const re = /(?:import|export)[^'"]*?from\s*['"]([^'"]+)['"]|import\s*['"]([^'"]+)['"]/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+        const spec = m[1] ?? m[2];
+        if (!spec || spec.startsWith(".") || spec.startsWith("/")) continue;
+        const parts = spec.split("/");
+        roots.add(spec.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0]);
+    }
+    return [...roots];
+}
+
+// Union the frontend's real imports into frontend/package.json dependencies, so the
+// manifest never omits a package a .tsx file imports. Only adds packages we have a
+// known-good version for; an unknown import is left for the build tier to flag.
+function reconcileFrontendDeps(files: FileSpec[], log: Progress): void {
+    const pkg = files.find((f) => f.path.endsWith("frontend/package.json"));
+    if (!pkg) return;
+    let json: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    try { json = JSON.parse(pkg.content); } catch { return; } // malformed — leave for the loop to fix
+    const deps = json.dependencies ?? (json.dependencies = {});
+    const dev  = json.devDependencies ?? {};
+
+    const imported = new Set<string>();
+    for (const f of files) {
+        if (/frontend\/.*\.(t|j)sx?$/.test(f.path)) {
+            for (const r of bareImportRoots(f.content)) imported.add(r);
+        }
+    }
+    const added: string[] = [];
+    for (const root of imported) {
+        if (deps[root] || dev[root]) continue;
+        const ver = FRONTEND_DEP_VERSIONS[root];
+        if (!ver) continue; // unknown package: don't guess a version
+        deps[root] = ver;
+        added.push(`${root}@${ver}`);
+    }
+    if (added.length) {
+        pkg.content = JSON.stringify(json, null, 2);
+        log(`📦 Dependency reconciler: added ${added.join(", ")} to frontend/package.json.`);
+    }
+}
 
 // Action 1: first-pass generation — built LAYER BY LAYER (not one giant stream),
 // so each file is generated knowing the interfaces of the files already written.
@@ -101,6 +232,10 @@ export async function generateInitialCode(
         }
         log(`✅ ${layer.name}: ${files.length} file(s) (total ${written.length}).`);
     }
+
+    // Deterministic dependency reconciliation: ensure package.json declares every
+    // frontend import (the Config layer can miss one, e.g. react-router-dom).
+    reconcileFrontendDeps(written, log);
 
     // Safety net: if the layered pass produced too little, fall back to one-shot.
     if (written.length < 3) {
@@ -251,20 +386,64 @@ function failurePointsAtFile(fail: { kind: string; id: string; detail: string },
     return false;
 }
 
+// Fallback for a build error that named no specific file (e.g. "backend: pip
+// install"): scope to the failing SUBTREE (or the dependency manifest) instead of
+// the whole repo. A backend build error re-emits only backend/ files, a frontend
+// one only frontend/ — far tighter, so we almost never send the full repo.
+function buildErrorTargetsFile(fail: Failure, file: FileSpec): boolean {
+    if (fail.kind !== "build_error") {
+        return false;
+    }
+    if (fail.id.includes("pip install")) {
+        return file.path.endsWith("requirements.txt");
+    }
+    if (fail.id.includes("npm install")) {
+        return file.path.endsWith("package.json");
+    }
+    if (fail.id.includes("backend")) {
+        return file.path.startsWith("backend/");
+    }
+    if (fail.id.includes("frontend")) {
+        return file.path.startsWith("frontend/");
+    }
+    return false;
+}
+
 function filesImplicatedBy(prevFiles: CodeArtifact, report: TestReport): FileSpec[] {
-    const hits: FileSpec[] = [];
-    for (const f of prevFiles) {
-        let mentioned = false;
-        for (const fail of report.failures) {
+    const hits = new Set<string>();
+
+    // Pass 1 — precise matching (path / basename / stem / coverage routing).
+    // Track which failures pinned at least one file so we know what's unresolved.
+    const unmatchedBuildErrors: Failure[] = [];
+    for (const fail of report.failures) {
+        let matched = false;
+        for (const f of prevFiles) {
             if (failurePointsAtFile(fail, f)) {
-                mentioned = true;
+                hits.add(f.path);
+                matched = true;
             }
         }
-        if (mentioned) {
-            hits.push(f);
+        if (!matched && fail.kind === "build_error") {
+            unmatchedBuildErrors.push(fail);
         }
     }
-    return hits;
+
+    // Pass 2 — build errors that pinned nothing precise → scope to their subtree.
+    for (const fail of unmatchedBuildErrors) {
+        for (const f of prevFiles) {
+            if (buildErrorTargetsFile(fail, f)) {
+                hits.add(f.path);
+            }
+        }
+    }
+
+    const out: FileSpec[] = [];
+    for (const f of prevFiles) {
+        if (hits.has(f.path)) {
+            out.push(f);
+        }
+    }
+    return out;
 }
 
 // Scoped fix prompt: re-emit ONLY the implicated files (full bodies), and show
@@ -388,13 +567,64 @@ export async function regenerateFromReflection(
     return mergeFiles(prevFiles, patches);
 }
 
+// A stronger model for the FINAL whole-repo integration pass — cross-file wiring
+// bugs (mismatched signatures, missing exports, a double Base/engine) need a global
+// view and more discipline than the per-file repair model.
+const INTEGRATION_MODEL = "claude-sonnet-4-6";
+
+// Final safety net before the pipeline ships an app: when the loop is about to
+// finalize an artifact that still fails to boot, do ONE whole-repo pass focused
+// ONLY on cross-file consistency so the app imports and BOOTS. Business logic and
+// features are left untouched. Returns the merged artifact.
+export async function integrationRepair(
+    files: CodeArtifact,
+    report: TestReport,
+    ir: AgentIR,
+    onProgress?: Progress,
+): Promise<CodeArtifact> {
+    const prompt = `
+The files below were generated layer-by-layer and may have CROSS-FILE
+inconsistencies that stop the app from importing or booting — e.g. a function
+imported with the wrong signature, a name imported that the defining module does
+not export, the SQLAlchemy Base or engine defined in two places, or mismatched
+import conventions between modules.
+
+The build/boot test reported these failures:
+${report.failures.map((f) => `- ${f.detail}`).join("\n") || "(none captured)"}
+
+Re-emit ONLY the files you must change so the project IMPORTS and BOOTS cleanly.
+Rules:
+- Fix WIRING/INTEGRATION ONLY. Do NOT add features, change business logic/formulas,
+  remove endpoints, or rename public routes or entities.
+- Make module contracts agree: a function is called with the exact signature it is
+  defined with; every imported name is actually exported by its module.
+- Exactly ONE SQLAlchemy declarative Base (in the models module), imported everywhere.
+  Exactly ONE async engine + session (in the database module), imported by the rest.
+- One import convention across the backend (package-relative, e.g. "from backend.x").
+
+## OPM IR
+${JSON.stringify(ir, null, 2)}
+
+## Current files
+${files.map((f) => `===FILE: ${f.path}===\n${f.content}\n===END===`).join("\n\n")}
+`.trim();
+
+    const text = await generateComplete(
+        (p) => claudeAskText(p, INTEGRATION_MODEL),
+        `${OPM_SYSTEM_PROMPT}\n\n${prompt}`,
+        onProgress,
+    );
+    const patches = parseDelimitedFiles(text);
+    return mergeFiles(files, patches);
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 // Lines that declare an interface another layer must match: classes, functions,
 // route decorators, exported TS types. We keep these (the "signatures") and drop
 // the bodies, so the next layer sees what exists without resending the codebase.
 const SIGNATURE_RE =
-    /^\s*(class |def |async def |@app\.|@router\.|app\.(get|post|put|delete|patch)|router\.(get|post|put|delete|patch)|export |interface |type \w+\s*=|function )/;
+    /^\s*(import |class |def |async def |@app\.|@router\.|app\.(get|post|put|delete|patch)|router\.(get|post|put|delete|patch)|export |interface |type \w+\s*=|function )/;
 
 function signatureLines(file: FileSpec): string {
     const keep: string[] = [];

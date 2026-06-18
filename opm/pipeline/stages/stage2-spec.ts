@@ -52,6 +52,29 @@ COVERAGE IS MANDATORY — this is a fidelity tool, you may NOT summarize, sample
 - EVERY object (O1..On) MUST appear, either as an entity OR as a typed field of an entity.
 - SELF-CHECK before answering: confirm every O-id and every P-id from the input appears
   in some "source". If any is missing, add it. Do not return until coverage is complete.
+- ENUMERABILITY / REFERENCE LISTABILITY: every entity whose id is consumed by another
+  endpoint (any *_id request field, INCLUDING process/transition endpoints) OR selected in
+  any screen MUST expose a GLOBAL list endpoint { "method":"GET", "path":"/<plural>",
+  "source":"derived", "op":"list" } returning the full collection — a parent-scoped or
+  single-object read does NOT satisfy this. Add that entity to the "reads" array of every
+  screen that selects it.
+- REFERENCE-COMPLETENESS: for every entity referenced/selected by any endpoint body or
+  screen, also emit (a) a create endpoint { "method":"POST", "path":"/<plural>",
+  "op":"create", "source":"derived" } and (b) a create screen { "name":"<E>Create",
+  "route":"/<plural>/new", "writes":["<E>"] }. A selection dropdown is INVALID unless its
+  target entity has BOTH a list and a create endpoint. This is the one allowed exception to
+  "no features beyond the model" — populating selectable entities is required for the modeled
+  processes to be usable. Scope it to referenced entities only (objects a process YIELDS —
+  resultees — get reads only, no create).
+- SELECTION SOURCE INTEGRITY: (1) do not double-model an OPM part-object — if an aggregation
+  part (e.g. Fetal Growth Indication) is represented as an enum/state value of its whole, NO
+  screen may also expose it as a separate selectable foreign-key field; pick ONE representation.
+  (2) every required select's option source MUST be a global list endpoint guaranteed non-empty
+  for the modeled domain (e.g. GET /diagnoses or GET /diagnoses?type=<state>), NEVER a
+  parent-scoped subset filtered client-side by a sub-type that may be absent for that parent.
+- Extend the SELF-CHECK: confirm every required select's option source is a global list
+  endpoint (never a parent-scoped filtered subset), and every reference target has both a list
+  and a create endpoint.
 
 Entity vs. field (avoid a table per number):
 - A scalar/parameter object (a single number, weight, length, percentile, severity,

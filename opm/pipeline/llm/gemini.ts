@@ -3,6 +3,7 @@
 // Stage files call these helpers; swap provider here to switch models.
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { logLlmCall } from "../infra/llm-log";
 
 const MODEL_TEXT    = "gemini-2.5-flash";   // fast + cheap for parse/spec/compose
 const MODEL_VISION  = "gemini-2.5-flash";   // same model handles images
@@ -36,8 +37,11 @@ export async function askText(prompt: string, model = MODEL_TEXT, timeoutMs = CA
             temperature:     0.4,
         },
     });
+    const start = Date.now();
     const res = await withTimeout(g.generateContent(prompt), timeoutMs, "Gemini text call");
-    return res.response.text();
+    const text = res.response.text();
+    logLlmCall({ provider: "gemini", model, prompt, response: text, ms: Date.now() - start });
+    return text;
 }
 
 /** Send text prompt expected to return JSON. Retries + extracts JSON on parse failure. */
@@ -77,11 +81,21 @@ export async function askMultimodal(
         model,
         generationConfig: { maxOutputTokens: 65_536, temperature: 0.4 },
     });
+    const start = Date.now();
     const res = await withTimeout(g.generateContent([
         { text: prompt },
         { inlineData: { mimeType: file.mime, data: file.base64 } },
     ]), timeoutMs, "Gemini vision call");
-    return res.response.text();
+    const text = res.response.text();
+    // Don't dump the base64 file into the log — just note it.
+    logLlmCall({
+        provider: "gemini",
+        model,
+        prompt:   `${prompt}\n\n[+ attached file: ${file.mime}, ${file.base64.length} base64 chars]`,
+        response: text,
+        ms:       Date.now() - start,
+    });
+    return text;
 }
 
 export async function askMultimodalJson<T = unknown>(

@@ -11,6 +11,7 @@ import {
     generateInitialCode,
     reflectOnFailures,
     regenerateFromReflection,
+    integrationRepair,
 } from "./code-generation-agent";
 import type { CodeArtifact, TestReport, ReflectionNote, AttemptRecord, AgentIR } from "./types";
 
@@ -106,9 +107,27 @@ export async function runBuildLoop(
         // HALT? — pure decision. `repeated` = have we already seen this exact
         // failure set on an earlier iteration?
         const repeated = report.signature !== "" && seenSignatures.has(report.signature);
-        const outcome = decideHalt({ passed: report.passed, iter, maxIters, repeated });
+        let outcome = decideHalt({ passed: report.passed, iter, maxIters, repeated });
         if (outcome !== "RUNNING") {
             log(`🛑 Build loop halted: ${outcome} after ${iter + 1} pass(es).`);
+
+            // Final safety net: never finalize a non-booting app without one
+            // whole-repo integration-repair pass (stronger model) + re-test. This is
+            // what keeps the DOWNLOADED project boot-ready, not just "generated".
+            if (outcome !== "SUCCESS" && report.failures.length > 0) {
+                log("🩺 App still failing — running a final whole-repo integration repair…");
+                const repaired = await integrationRepair(artifact, report, ir, log);
+                const recheck = await runTests(repaired, ir);
+                if (recheck.failures.length < report.failures.length) {
+                    log(`🩺 Integration repair: ${report.failures.length} → ${recheck.failures.length} failure(s).`);
+                    artifact = repaired;
+                    report   = recheck;
+                    if (recheck.passed) outcome = "SUCCESS";
+                } else {
+                    log("🩺 Integration repair did not improve the result — keeping prior artifact.");
+                }
+            }
+
             return { artifact, report, outcome, iterations: iter + 1, ledger };
         }
 

@@ -4,9 +4,10 @@
 // can keep using Gemini / ChatGPT.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { logLlmCall } from "../infra/llm-log";
 
 const MODEL_CODEGEN = "claude-haiku-4-5-20251001";  // Haiku: 4x faster than Sonnet, fits in 4-min budget
-const MAX_TOKENS    = 12_000;                        // sufficient for 15-25 files
+const MAX_TOKENS    = 64_000;                        // Haiku 4.5 hard cap (64k) — minimizes continuations. 100k would 400-error.
 
 function client(): Anthropic {
     const key = process.env.ANTHROPIC_API_KEY;
@@ -21,6 +22,7 @@ export function isClaudeConfigured(): boolean {
 /** Send a text prompt, return the raw text response. */
 export async function askText(prompt: string, model = MODEL_CODEGEN): Promise<string> {
     const c = client();
+    const start = Date.now();
     const res = await c.messages.create({
         model,
         max_tokens:   MAX_TOKENS,
@@ -28,10 +30,12 @@ export async function askText(prompt: string, model = MODEL_CODEGEN): Promise<st
         messages: [{ role: "user", content: prompt }],
     });
     // Concatenate any text blocks in the response.
-    return res.content
+    const text = res.content
         .filter((b): b is Anthropic.TextBlock => b.type === "text")
         .map((b) => b.text)
         .join("\n");
+    logLlmCall({ provider: "claude", model, prompt, response: text, ms: Date.now() - start });
+    return text;
 }
 
 /** Send text prompt expected to return JSON. Salvages malformed responses. */

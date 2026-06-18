@@ -76,16 +76,29 @@ PostgreSQL (database), deployed to Railway (cloud host).
 ZERO-CONFIG CLOUD DEPLOY REQUIREMENTS (HARD):
 - The project is auto-deployed to Railway. The end user NEVER runs Docker, NEVER
   installs anything. They click a live URL and use the app.
-- Backend MUST use SQLAlchemy + asyncpg + PostgreSQL. NO Firebase, NO Firestore,
-  NO firebase-admin, NO firestore.rules, NO external emulator anywhere.
-- Backend reads DATABASE_URL from env (Railway injects it when a Postgres plugin
-  is attached). If it starts with "postgres://", rewrite to "postgresql+asyncpg://"
-  at startup.
+- Backend uses SQLAlchemy (async). It MUST default to a local SQLite file
+  ("sqlite+aiosqlite:///./app.db") when DATABASE_URL is unset, so it runs with ZERO
+  setup, and use Postgres (asyncpg) when DATABASE_URL is provided. NO Firebase,
+  NO Firestore, NO firebase-admin, NO external emulator anywhere.
+- Use database-PORTABLE column types ONLY (String ids storing str(uuid4()),
+  generic sqlalchemy.JSON) — NEVER sqlalchemy.dialects.postgresql.* — so the same
+  models run on both SQLite and Postgres. Include aiosqlite in requirements.
+- Backend reads DATABASE_URL from env. Normalize BOTH "postgres://" AND a bare
+  "postgresql://" to "postgresql+asyncpg://" at startup.
 - Backend MUST create its schema on startup with SQLAlchemy metadata.create_all
   (or Alembic) BEFORE serving requests. Do NOT depend on any external
   "wait-for-*" shell script; rely on restart/retry or a DB healthcheck.
-- Backend MUST run a seed routine that inserts 3–5 sample rows per table derived
-  from OPM object names/states. Idempotent.
+- Backend MUST run an idempotent seed routine (invoked on startup AFTER
+  metadata.create_all, before serving) that guarantees: (a) >=3 rows for EVERY table
+  derived from OPM objects; (b) >=2 rows for EVERY distinct value of every enum/state
+  column (e.g. >=2 Diagnosis rows per DiagnosisType, >=2 PerinatalParameterSet rows per
+  Gender); (c) >=1 row for EVERY entity another entity references via FK; AND (d) pick ONE
+  primary demo entity (the entity the UI links to first) and give it one related row of
+  EACH value any dropdown filters on — e.g. for a Diagnose/Treat process the demo child
+  owns a Diagnosis of EACH DiagnosisType the form selects (including FetalGrowthIndication)
+  plus its own perinatal and postnatal parameter sets — so every FK-backed AND every
+  enum/state-filtered dropdown on the demo entity has >=1 (preferably >=2) selectable
+  options. Compute counts from the enum definitions, not a fixed total. Idempotent.
 - Frontend uses axios to call the backend via VITE_API_BASE_URL (Railway sets it
   to the backend's public URL at build time).
 - Emit a Dockerfile for BOTH services (Railway builds from Dockerfile) using a
@@ -104,6 +117,12 @@ The super prompt MUST:
   If the spec lists N endpoints, the super prompt lists all N — including non-compute
   "action" endpoints (create/define/change/examine/etc.), not only the ones that
   carry a formula. Do not summarize, sample, or omit any process or object.
+- For EVERY entity whose id is consumed by another endpoint (any *_id request field,
+  INCLUDING process endpoints) OR selected in any screen, the super prompt MUST require a
+  GLOBAL list endpoint GET /<plural> returning the full collection (a parent-scoped/nested
+  read does NOT satisfy this), AND a POST /<plural> create endpoint — so the frontend can
+  populate a selector and add rows instead of forcing a free-text id input. Every such
+  reference field renders as a <select> sourced from that global list, never a text input.
 - For every process that has a "computation", copy that formula VERBATIM from the IR
   into the endpoint. Preserve EVERY arithmetic operator exactly — never drop a "*"
   (write ")*100" not ")100", "a*b" not "ab"). The formula must be valid, runnable code.
@@ -113,13 +132,19 @@ The super prompt MUST:
   as modelled (reject illegal source states with 409); no invented fields;
   consumees destroyed, resultees created, instruments untouched; include
   TRACEABILITY.md (OPL sentence -> artifact), README.md, docker-compose.yml.
-- Include a seed routine populating sample data for every OPM object.
+- Include an idempotent seed routine that covers every OPM object table AND every
+  enum/state value with >=2 rows each, plus >=1 row for every FK-referenced entity, with the
+  primary demo entity owning one row of every value any dropdown filters on, so no filtered
+  dropdown is ever empty.
 - Frontend MUST include index.html (Vite entry) and a package.json whose scripts
   are exactly { "dev": "vite", "build": "vite build", "preview": "vite preview" }.
 - Instruct the generator to emit files in the delimiter format used by Stage 4.
 
 SELF-CHECK before responding: confirm the super prompt references every endpoint id
-and every entity id present in the spec, and that no "*" was dropped from any formula.
+and every entity id present in the spec, and that no "*" was dropped from any formula;
+confirm the seed clause requires per-enum-value and per-FK coverage with the demo entity
+owning every filtered value (not just a per-table count); and confirm every *_id reference
+target has a global GET /<plural> list endpoint plus a POST /<plural> create endpoint.
 
 Respond with ONLY the super prompt text (no markdown fences, no preamble).
 `.trim();

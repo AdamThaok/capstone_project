@@ -54,6 +54,17 @@ Rules:
   AUTHORITATIVE source — trust them over the rendered diagram images. Merge every
   SD found in the document into ONE IR (an object/process shared across SDs keeps
   a single id).
+- COVERAGE IS MANDATORY — do NOT summarize, sample, or collapse: the ELEMENTS DICTIONARY
+  > Things > Processes section lists EVERY process by name. Emit exactly one process object
+  per listed process, across ALL diagrams/OPDs (the top SD and every in-zoomed OPD). Do NOT
+  merge a zoomed-in subprocess (e.g. "Diagnosing", "6-month Percentile Calculating ()") into
+  its parent process (e.g. "FTT Diagnosing & Treating"); each is its own process object that
+  reuses the same id when it recurs across OPDs.
+- A process name ending in "()" carries a "Process Computational Function"; copy that code
+  VERBATIM into that process's "computation" field.
+- SELF-CHECK before returning: count the processes listed in the source Processes dictionary
+  and confirm processes[] has the SAME count. If fewer, you summarized — add the missing ones
+  before answering.
 - Map the Relations sections to link "type": Agent→agent, Instrument→instrument,
   Result→result, Consumption→consumption, "changes X from a to b"→effect,
   Invocation→invocation, Aggregation→aggregation, Exhibition→exhibition,
@@ -112,7 +123,9 @@ async function parseSingleWithGemini(
                 { mime, base64: bytes.toString("base64") }, undefined, perCallMs);
         }
         const text = bytes.toString("utf-8");
-        const MAX = 60_000;
+        // Large OPL text exports can exceed this; keep generous so the Processes
+        // dictionary isn't truncated away (the PDF path is unaffected — it's sent whole).
+        const MAX = 200_000;
         const snippet = text.length > MAX ? text.slice(0, MAX) + "\n<!-- truncated -->" : text;
         return askJson<OpmModel>(
             `${IR_SCHEMA_PROMPT}\n\nInput file (${ext || format}):\n\n${snippet}`,
@@ -288,6 +301,16 @@ export async function parseOpm_stage1(input: {
         filenames.map((name, i) => parseSingle(name, input.format, filePaths[i], budgetMs, onProgress)),
     );
 
-    if (partials.length === 1) return partials[0];
-    return mergeIRs(partials);
+    const merged = partials.length === 1 ? partials[0] : mergeIRs(partials);
+
+    // Sanity warn: a model with many objects but <=1 process almost always means the
+    // parser summarized the Processes dictionary into the single top-level SD process
+    // (the FTT2 regression: 38 processes collapsed to 1). Surfaced, not fatal.
+    const nProc = (merged.processes ?? []).length;
+    const nObj  = (merged.objects ?? []).length;
+    if (nProc <= 1 && nObj > 5) {
+        onProgress?.(`⚠️ stage1: only ${nProc} process(es) parsed vs ${nObj} objects — likely the ` +
+            `parser summarized the Processes dictionary; check IR process coverage.`);
+    }
+    return merged;
 }

@@ -19,7 +19,7 @@
 //                        OPM_RUN_BUILD_CHECKS=1 (it's slow and runs the code).
 //   Tier 4  acceptance : LLM-judged behaviour tests; skipped if Gemini is absent.
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync, spawn } from "node:child_process";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
@@ -148,6 +148,168 @@ export function signatureOf(failures: Failure[]): string {
     return failures.map((f) => `${f.kind}:${f.id}`).sort().join("|");
 }
 
+// ── Tier 2c: frontend import resolvability + compose closure (deterministic) ──
+// Always-on and cheap. The env-gated Tier 3 actually builds, but by default it is
+// off — so these two static checks are what stop the exact boot defects that shipped:
+// react-router-dom missing from package.json (white screen), main.tsx importing a
+// never-emitted ./index.css (the file-lane enforcer dropped it), and docker-compose
+// referencing a missing frontend/Dockerfile.
+
+const FE_SRC_RE = /frontend\/.*\.(t|j)sx?$/;
+const ASSET_RE  = /\.(svg|png|jpe?g|gif|webp|ico|avif)$/i;
+const NODE_BUILTINS = new Set([
+    "fs", "path", "os", "url", "http", "https", "crypto", "stream", "util", "events",
+    "child_process", "process", "buffer", "querystring", "zlib",
+]);
+
+// Every import specifier in a JS/TS source (both `... from '...'` and bare `import '...'`).
+function importSpecifiers(content: string): string[] {
+    const specs: string[] = [];
+    const re = /(?:import|export)[^'"]*?from\s*['"]([^'"]+)['"]|import\s*['"]([^'"]+)['"]/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content)) !== null) {
+        const s = m[1] ?? m[2];
+        if (s) specs.push(s);
+    }
+    return specs;
+}
+
+// Package root of a specifier: "react-dom/client" -> "react-dom", "@scope/p/x" -> "@scope/p".
+function pkgRoot(spec: string): string {
+    const parts = spec.split("/");
+    return spec.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+}
+
+// Does a relative import from `fromPath` resolve to some emitted file?
+function relativeResolves(spec: string, fromPath: string, have: Set<string>): boolean {
+    const stack = normPath(fromPath).split("/").slice(0, -1);
+    for (const seg of spec.split("/")) {
+        if (seg === "" || seg === ".") continue;
+        if (seg === "..") stack.pop();
+        else stack.push(seg);
+    }
+    const base = stack.join("/");
+    const candidates = [
+        base,
+        `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`, `${base}.json`, `${base}.css`,
+        `${base}/index.ts`, `${base}/index.tsx`, `${base}/index.js`, `${base}/index.jsx`,
+    ];
+    return candidates.some((c) => have.has(c));
+}
+
+export function frontendResolvabilityFailures(files: FileSpec[]): Failure[] {
+    const pkg = files.find((f) => normPath(f.path).endsWith("frontend/package.json"));
+    if (!pkg) return []; // no frontend manifest — nothing to resolve against
+    let deps = new Set<string>();
+    try {
+        const j = JSON.parse(pkg.content) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+        deps = new Set([...Object.keys(j.dependencies ?? {}), ...Object.keys(j.devDependencies ?? {})]);
+    } catch {
+        return [{ kind: "build_error", id: "frontend: package.json", detail: "frontend/package.json is not valid JSON" }];
+    }
+    const have = new Set(files.map((f) => normPath(f.path)));
+    const out: Failure[] = [];
+    const seen = new Set<string>();
+    for (const f of files) {
+        const p = normPath(f.path);
+        if (!FE_SRC_RE.test(p)) continue;
+        for (const spec of importSpecifiers(f.content)) {
+            if (spec.startsWith(".") || spec.startsWith("/")) {
+                if (ASSET_RE.test(spec)) continue; // assets may be handled by the bundler / external
+                if (!relativeResolves(spec, p, have)) {
+                    const key = `rel:${p}:${spec}`;
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        out.push({ kind: "build_error", id: `frontend: ${spec}`, detail: `${f.path} imports '${spec}' but no emitted file resolves it (e.g. a missing index.css or page).` });
+                    }
+                }
+                continue;
+            }
+            const root = pkgRoot(spec);
+            if (root === "react" || root === "react-dom" || root.startsWith("node:") || NODE_BUILTINS.has(root) || deps.has(root)) continue;
+            const key = `dep:${root}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                out.push({ kind: "build_error", id: `npm install: ${root}`, detail: `frontend imports '${root}' (in ${f.path}) but it is not declared in frontend/package.json dependencies.` });
+            }
+        }
+    }
+    return out;
+}
+
+// docker-compose may only reference Dockerfiles that are actually emitted.
+export function composeClosureFailures(files: FileSpec[]): Failure[] {
+    const compose = files.find((f) => { const p = normPath(f.path); return p === "docker-compose.yml" || p.endsWith("/docker-compose.yml"); });
+    if (!compose) return [];
+    const have = new Set(files.map((f) => normPath(f.path)));
+    const out: Failure[] = [];
+    const seen = new Set<string>();
+    const clean = (s: string) => s.trim().replace(/^['"]|['"]$/g, "").replace(/\/$/, "");
+    // Resolve a (context, dockerfile) pair to a repo-root-relative emitted path.
+    // dockerfile may itself be root-relative ("backend/Dockerfile") with context "."
+    // OR a bare name ("Dockerfile") with context "./backend". Collapse "./" so a
+    // "./backend/Dockerfile" reference matches the emitted "backend/Dockerfile"
+    // (without this the leading "./" caused false-positive "not emitted" failures).
+    const resolve = (ctx: string, df: string): string => {
+        const c = clean(ctx);
+        const d = clean(df);
+        const base = (c && c !== ".") ? `${c}/${d}` : d;
+        return normPath(base.replace(/^\.\//, "").replace(/\/\.\//g, "/"));
+    };
+    const flag = (full: string, why: string) => {
+        if (!have.has(full) && !seen.has(full)) { seen.add(full); out.push({ kind: "build_error", id: `compose: ${full}`, detail: why }); }
+    };
+    let ctx = ".";
+    for (const line of compose.content.split("\n")) {
+        if (/^\s*build:\s*$/.test(line)) ctx = ".";          // new build block — reset context default
+        const cm = line.match(/^\s*context:\s*(\S+)/);
+        if (cm) ctx = cm[1];
+        const dm = line.match(/^\s*dockerfile:\s*(\S+)/);
+        if (dm) {
+            const full = resolve(ctx, dm[1]);
+            flag(full, `docker-compose.yml references Dockerfile '${full}' that is not emitted.`);
+        }
+        const bm = line.match(/^\s*build:\s*(\S+)\s*$/);     // shorthand: build: ./frontend
+        if (bm) {
+            const full = resolve(bm[1], "Dockerfile");
+            flag(full, `docker-compose.yml build context '${bm[1].trim()}' has no emitted ${full}.`);
+        }
+    }
+    return out;
+}
+
+// A tsconfig must not point (via references / extends) at a file we don't emit —
+// a dangling "./tsconfig.node.json" reference fails `vite build` even though every
+// compilerOption is valid. Deterministic + always-on, so the loop self-corrects it.
+export function tsconfigClosureFailures(files: FileSpec[]): Failure[] {
+    const have = new Set(files.map((f) => normPath(f.path)));
+    const out: Failure[] = [];
+    for (const f of files) {
+        const p = normPath(f.path);
+        if (!/frontend\/.*tsconfig.*\.json$/.test(p)) continue;
+        let j: { references?: { path?: string }[]; extends?: string };
+        try { j = JSON.parse(f.content); } catch { continue; } // tsc-validity is checked elsewhere
+        const dir = p.split("/").slice(0, -1);
+        const resolveRel = (ref: string): string => {
+            const stack = [...dir];
+            for (const seg of ref.split("/")) { if (seg === "" || seg === ".") continue; if (seg === "..") stack.pop(); else stack.push(seg); }
+            let base = stack.join("/");
+            if (!/\.json$/.test(base)) base += "/tsconfig.json"; // a dir reference resolves to its tsconfig.json
+            return normPath(base);
+        };
+        const refs: string[] = [];
+        for (const r of j.references ?? []) if (r && r.path) refs.push(r.path);
+        if (typeof j.extends === "string" && j.extends.startsWith(".")) refs.push(j.extends);
+        for (const ref of refs) {
+            const full = resolveRel(ref);
+            if (!have.has(full)) {
+                out.push({ kind: "build_error", id: `tsconfig: ${ref}`, detail: `${f.path} references '${ref}' (-> ${full}) which is not emitted — breaks the frontend build.` });
+            }
+        }
+    }
+    return out;
+}
+
 // ── Tier 3: build & boot (real, expensive — env-gated) ───────────────────────
 // Writes the artifact to disk and actually builds it. Catches what the cheap
 // tiers can't: missing deps, broken imports, build failures.
@@ -182,6 +344,23 @@ function tail(s: string, n = 600): string {
 // Write the artifact to a REUSED temp dir, so node_modules/.venv from a previous
 // iteration survive and installs stay incremental.
 function writeArtifactToTemp(files: FileSpec[]): string {
+    const wanted = new Set(files.map((f) => f.path.replace(/^[\\/]+/, "")));
+    // Prune orphan files left by a PREVIOUS run so a stale file (e.g. a leftover
+    // tsconfig.node.json or index.css from another project) can't make the build pass
+    // while the CURRENT artifact is missing it. Keep the expensive caches
+    // (node_modules / .venv / __pycache__ / dist / .git) so installs stay incremental.
+    const skip = (rel: string) => /(^|\/)(node_modules|\.venv|__pycache__|\.git|dist)(\/|$)/.test(rel);
+    const prune = (dir: string) => {
+        const entries = (() => { try { return fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; } })();
+        for (const e of entries) {
+            const full = path.join(dir, e.name);
+            const rel = path.relative(BUILD_ROOT, full).split(path.sep).join("/");
+            if (skip(rel)) continue;
+            if (e.isDirectory()) prune(full);
+            else if (!wanted.has(rel)) { try { fs.rmSync(full, { force: true }); } catch { /* ignore */ } }
+        }
+    };
+    prune(BUILD_ROOT);
     for (const f of files) {
         const rel = f.path.replace(/^[\\/]+/, "");
         if (rel.includes("..")) continue;
@@ -208,9 +387,58 @@ function checkFrontend(root: string): Failure[] {
     return [];
 }
 
-// Backend: venv + pip install + `import main`. Catches broken imports / missing
-// models. Uses a SQLite DATABASE_URL so the import needs no real database.
-function checkBackend(root: string): Failure[] {
+// Poll an HTTP endpoint until it answers 2xx or the deadline passes.
+async function pollUp(url: string, deadlineMs: number): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < deadlineMs) {
+        try {
+            const res = await fetch(url);
+            if (res.ok) return true;
+        } catch {
+            /* server not accepting connections yet */
+        }
+        await new Promise((r) => setTimeout(r, 500));
+    }
+    return false;
+}
+
+// Actually START the server and hit it. This is the difference between "build" and
+// "boot": `import backend.main` runs the module but NEVER triggers the app's
+// lifespan startup, so a bad startup (e.g. an init_db() signature mismatch, a
+// broken DB wiring) imports fine yet crashes the moment uvicorn boots. We launch
+// uvicorn, wait for FastAPI's always-present /openapi.json (served only after the
+// lifespan startup succeeds), then tear the process down.
+async function bootBackend(root: string, venvPy: string): Promise<Failure[]> {
+    const port = 8123;
+    const proc = spawn(
+        venvPy,
+        ["-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", String(port)],
+        { cwd: root, env: { ...process.env, DATABASE_URL: "sqlite+aiosqlite:///./_boot.db", PORT: String(port) } },
+    );
+    let logBuf = "";
+    proc.stdout?.on("data", (d) => { logBuf += d.toString(); });
+    proc.stderr?.on("data", (d) => { logBuf += d.toString(); });
+
+    try {
+        const up = await pollUp(`http://127.0.0.1:${port}/openapi.json`, 25_000);
+        if (!up) {
+            return [{
+                kind:   "build_error",
+                id:     "backend: boot",
+                detail: `backend failed to boot — the server never started serving requests within 25s ` +
+                        `(usually a startup/lifespan crash, not an import error):\n${tail(logBuf)}`,
+            }];
+        }
+        return [];
+    } finally {
+        try { proc.kill("SIGKILL"); } catch { /* already gone */ }
+    }
+}
+
+// Backend: venv + pip install + `import backend.main` + REAL BOOT. Runs the import
+// from the repo ROOT so package-relative imports (`from backend.x import ...`)
+// resolve, using an async-compatible SQLite URL.
+async function checkBackend(root: string): Promise<Failure[]> {
     const dir = path.join(root, "backend");
     if (!fs.existsSync(path.join(dir, "main.py"))) return [];
 
@@ -233,17 +461,27 @@ function checkBackend(root: string): Failure[] {
             return [{ kind: "build_error", id: "backend: pip install", detail: `backend "pip install -r requirements.txt" failed:\n${tail(pip.out)}` }];
         }
     }
-    const imp = runCmd(venvPy, ["-c", "import main"], { cwd: dir, timeoutMs: 60_000, env: { DATABASE_URL: "sqlite:///./_check.db" } });
+
+    // Import check — from the repo root, async SQLite URL so create_async_engine works.
+    const imp = runCmd(venvPy, ["-c", "import backend.main"], {
+        cwd: root,
+        timeoutMs: 60_000,
+        env: { DATABASE_URL: "sqlite+aiosqlite:///./_check.db" },
+    });
     if (!imp.ok) {
-        return [{ kind: "build_error", id: "backend: import main", detail: `backend "import main" failed:\n${tail(imp.out)}` }];
+        return [{ kind: "build_error", id: "backend: import main", detail: `backend "import backend.main" failed:\n${tail(imp.out)}` }];
     }
-    return [];
+
+    // Boot check — start the server for real and confirm it serves requests.
+    return bootBackend(root, venvPy);
 }
 
 // Tier 3 entry: build both halves on disk, collect failures.
-function buildFailures(files: FileSpec[]): Failure[] {
+async function buildFailures(files: FileSpec[]): Promise<Failure[]> {
     const root = writeArtifactToTemp(files);
-    return [...checkFrontend(root), ...checkBackend(root)];
+    const frontend = checkFrontend(root);
+    const backend  = await checkBackend(root);
+    return [...frontend, ...backend];
 }
 
 // The Testing Agent's single public action: judge a code artifact.
@@ -266,10 +504,25 @@ export async function runTests(files: FileSpec[], ir: AgentIR): Promise<TestRepo
     // Tier 2b: the generated python compiles (if python is available).
     for (const f of pythonSyntaxFailures(files)) failures.push(f);
 
-    // Tier 3: build & boot — expensive, env-gated, and only run when the cheap
-    // tiers are already clean (no point building structurally-broken code).
-    if (process.env.OPM_RUN_BUILD_CHECKS === "1" && failures.length === 0) {
-        for (const f of buildFailures(files)) failures.push(f);
+    // Tier 2c: frontend import resolvability + docker-compose closure (deterministic,
+    // always-on, cheap). Catches white-screen boot defects the env-gated build tier would
+    // otherwise miss: a bare import absent from package.json, a dangling relative import
+    // (e.g. a missing index.css), or a compose file naming a Dockerfile we never emit.
+    for (const f of frontendResolvabilityFailures(files)) failures.push(f);
+    for (const f of composeClosureFailures(files)) failures.push(f);
+    for (const f of tsconfigClosureFailures(files)) failures.push(f);
+
+    // Tier 3: build & boot — expensive, env-gated. Run it once the tiers that
+    // actually affect the build are clean. We DELIBERATELY ignore invalid_formula
+    // and uncovered_id here: both live in the OPM IR (which the codegen loop treats
+    // as immutable, so it can never fix them) and neither stops the app from building
+    // or booting. Gating Tier 3 on them once hid a real boot failure (a cross-file
+    // import/name mismatch) behind a single malformed IR formula.
+    const blocksBuild = failures.filter(
+        (f) => f.kind !== "invalid_formula" && f.kind !== "uncovered_id",
+    );
+    if (process.env.OPM_RUN_BUILD_CHECKS === "1" && blocksBuild.length === 0) {
+        for (const f of await buildFailures(files)) failures.push(f);
     }
 
     // Tier 4: LLM acceptance tests — ADVISORY ONLY. An LLM judges the code fresh

@@ -13,7 +13,7 @@ import crypto from "node:crypto";
 
 // BUMP this whenever you change a Stage 1-3 prompt (IR_SCHEMA_PROMPT, SPEC_PROMPT,
 // or the Stage 3 super-prompt) so old cached results are invalidated.
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v3";  // v3: Stage 1 process-coverage + Stage 2/3 global-list-endpoint & seed-coverage prompt fixes (dropdowns/UI/boot) — invalidates pre-fix IR/spec/super-prompt
 
 const CACHE_DIR = path.join(os.tmpdir(), "opm-cache");
 

@@ -15,3 +15,6 @@ __pycache__/
 
 # TypeScript incremental build cache (auto-regenerated)
 tsconfig.tsbuildinfo
+
+# Runtime LLM call logs (debug artifacts, not source)
+web/llm-logs/

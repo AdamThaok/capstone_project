@@ -51,34 +51,29 @@ OUTPUT FORMAT (STRICT — use this exact delimiter format, NOT JSON):
 
 RULES:
 - Use ONLY the ===FILE: path=== ... ===END=== format. No JSON. No markdown blocks.
-- Generate 12–18 files covering: FastAPI backend, React frontend, DB models, docker-compose, README.
+- Generate 14–22 files covering: FastAPI backend + seed, React frontend (incl. index.css), DB models, docker-compose, Dockerfiles, README.
 - Every file must be complete and runnable. No stubs or TODO placeholders.
 - Every OPM Object → SQLAlchemy model + Pydantic schema.
 - Every OPM Process → FastAPI endpoint with correct HTTP method.
 - Every state-change link → transition endpoint with 409 guard.
 
 MANDATORY FILES (must all be present):
-1. backend/main.py          — FastAPI app with all routers, CORS, uvicorn entry
+1. backend/main.py          — FastAPI app with all routers, CORS, uvicorn entry; on startup run Base.metadata.create_all THEN call seed_db before serving
 2. backend/models.py        — SQLAlchemy models for every OPM Object
 3. backend/schemas.py       — Pydantic schemas (request/response)
-4. backend/database.py      — SQLAlchemy engine + session
-5. backend/requirements.txt — All pip dependencies
-6. frontend/package.json    — MUST include scripts: {"dev":"vite","build":"vite build","preview":"vite preview"}
+4. backend/database.py      — SQLAlchemy engine + session + an idempotent async seed_db(session) inserting >=2 rows per model and >=1 row per enum value, with the primary demo entity owning one row of EACH value any dropdown filters on
+5. backend/requirements.txt — All pip dependencies (include aiosqlite AND asyncpg)
+6. frontend/package.json    — scripts {"dev":"vite","build":"vite build","preview":"vite preview"}; dependencies cover EVERY package the frontend imports (react, react-dom, axios, react-router-dom if routing is used)
 7. frontend/vite.config.ts  — Vite config with proxy to backend port 8000
 8. frontend/src/App.tsx     — Main React app with all views
-9. frontend/src/main.tsx    — React entry point
+9. frontend/src/main.tsx    — React entry point (imports ./index.css)
 10. frontend/index.html     — HTML entry
-11. docker-compose.yml      — Services: backend (port 8000), db (postgres)
-12. README.md               — MUST include exact commands: "cd frontend && npm install && npm run dev" for frontend, "cd backend && pip install -r requirements.txt && uvicorn main:app --reload" for backend
+11. frontend/src/index.css  — global stylesheet imported by main.tsx; defines every className the components use; NO @tailwind directives unless JSX uses Tailwind utilities
+12. docker-compose.yml      — Services: backend (port 8000), db (postgres); may reference ONLY Dockerfiles also emitted
+13. frontend/Dockerfile     — node:20-alpine build+preview on the port docker-compose maps
+14. README.md               — exact commands run FROM THE PROJECT ROOT: frontend "cd frontend && npm install && npm run dev"; backend "pip install -r backend/requirements.txt && uvicorn backend.main:app --reload"
 
-frontend/package.json MUST look exactly like this (adapt name):
-{
-  "name": "generated-app",
-  "version": "1.0.0",
-  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
-  "dependencies": { "react": "^18", "react-dom": "^18", "axios": "^1" },
-  "devDependencies": { "@vitejs/plugin-react": "^4", "vite": "^5", "typescript": "^5", "@types/react": "^18", "@types/react-dom": "^18" }
-}
+frontend/package.json: dependencies MUST be the EXACT set of npm packages imported anywhere under frontend/src (every bare/non-relative import specifier) — do NOT ship a hardcoded list. Keep react, react-dom, axios as the baseline and ADD whatever else is imported (e.g. react-router-dom when any page/App.tsx uses routing). Keep scripts exactly { "dev": "vite", "build": "vite build", "preview": "vite preview" }. Keep devDependencies: @vitejs/plugin-react ^4, vite ^5, typescript ^5, @types/react ^18, @types/react-dom ^18 (plus tailwindcss/postcss/autoprefixer if used). Never ship a package.json missing a package a .tsx file imports.
 `.trim();
 
 // System Builder Agent — combined role + OPM constraints, distilled from the
@@ -125,7 +120,31 @@ Hard constraints (non-negotiable):
   convert BOTH "postgres://" AND a bare "postgresql://" (no "+driver") to
   "postgresql+asyncpg://" before create_async_engine. Hosted Postgres (e.g.
   Railway) hands you "postgresql://...", which the sync dialect can't run async.
+- Use database-PORTABLE column types ONLY, so the SAME models run on SQLite (local,
+  zero-setup) AND Postgres (deploy). NEVER use dialect-specific types such as
+  sqlalchemy.dialects.postgresql.UUID or JSONB. For primary keys use a String
+  column storing str(uuid.uuid4()); for JSON use the generic sqlalchemy.JSON.
+- Default DATABASE_URL to "sqlite+aiosqlite:///./app.db" when the env var is unset,
+  so the app boots locally with no database to install. Include aiosqlite in
+  requirements.
 - Emit TRACEABILITY.md mapping each OPL sentence to the artifact(s) implementing it.
+- LAUNCH MUST MATCH IMPORTS. The backend uses package-relative imports (from backend.x),
+  so it runs ONLY from the repo root as "uvicorn backend.main:app". The backend Dockerfile
+  MUST set WORKDIR /app, "COPY backend/ ./backend/" (NEVER "COPY backend/ ."), and CMD
+  running "python -m uvicorn backend.main:app". NEVER generate "cd backend && uvicorn main:app".
+- SCHEMA CONTRACT: request bodies use *Create/*Update schemas; ALL responses use *Response
+  schemas. Never use a *Create schema as a response_model; never return a hand-built dict where
+  a *Response exists. Every *Response sets model_config = ConfigDict(from_attributes=True).
+- Every OPM Process/transition endpoint binds its dedicated typed Pydantic request schema
+  (body: <Process>Request) — never a bare dict or .get(); let Pydantic enforce required fields
+  (never "if not all([...])", which rejects a legitimate 0). Guard every nullable DB field with
+  "if x is None:" before any arithmetic or comparison.
+- Define an idempotent seed_db and invoke it on startup after metadata.create_all; the primary
+  demo entity must own one row of every value any dropdown filters on, so no required <select>
+  renders zero options.
+- Every frontend reference/foreign-key field (payload key ending in "_id") renders as a <select>
+  populated from that target entity's GLOBAL list endpoint — never a free-text id input, never an
+  owner-scoped/discriminator-filtered source that can be empty on a fresh DB.
 `.trim();
 
 // ── Parsing ─────────────────────────────────────────────────────────────────
@@ -181,6 +200,62 @@ function buildTree(files: FileSpec[]): TreeNode[] {
 function ensureTraceabilityFile(files: FileSpec[], opm: unknown, spec: unknown): FileSpec[] {
     const out = files.filter(f => f.path !== "TRACEABILITY.md");
     out.push({ path: "TRACEABILITY.md", content: generateTraceabilityMd(opm, spec) });
+    return out;
+}
+
+// One-click local launchers, injected DETERMINISTICALLY (like TRACEABILITY.md) so
+// every downloaded zip starts with no setup and the commands are always correct.
+// They match the generated app's real run contract: the backend launches from the
+// repo ROOT as `uvicorn backend.main:app` (package-relative imports) on :8000 — the
+// frontend's default VITE_API_BASE_URL — and the frontend is Vite on :5173.
+export const START_BAT = `@echo off
+REM One-click local launcher (Windows). Backend :8000, frontend :5173.
+REM Requires Python 3.11+ and Node 18+ on PATH.
+setlocal
+cd /d "%~dp0"
+
+echo [1/3] Backend: creating venv + installing dependencies...
+if not exist ".venv\\Scripts\\python.exe" python -m venv .venv
+call ".venv\\Scripts\\python.exe" -m pip install -r backend\\requirements.txt
+
+echo [2/3] Starting backend on http://localhost:8000 ...
+start "backend" cmd /k ".venv\\Scripts\\python.exe -m uvicorn backend.main:app --reload --port 8000"
+
+echo [3/3] Frontend: installing dependencies + starting on http://localhost:5173 ...
+cd frontend
+call npm install
+start "frontend" cmd /k "npm run dev"
+
+echo.
+echo App starting -- backend http://localhost:8000  frontend http://localhost:5173
+endlocal
+`;
+
+export const START_SH = `#!/usr/bin/env bash
+# One-click local launcher (macOS/Linux). Backend :8000, frontend :5173.
+set -e
+cd "$(dirname "$0")"
+
+echo "[1/3] Backend: creating venv + installing dependencies..."
+python3 -m venv .venv 2>/dev/null || python -m venv .venv
+./.venv/bin/python -m pip install -r backend/requirements.txt
+
+echo "[2/3] Starting backend on http://localhost:8000 ..."
+./.venv/bin/python -m uvicorn backend.main:app --reload --port 8000 &
+BACK=$!
+trap "kill $BACK 2>/dev/null" EXIT
+
+echo "[3/3] Frontend: installing dependencies + starting on http://localhost:5173 ..."
+cd frontend
+npm install
+npm run dev
+`;
+
+// Inject start.bat + start.sh at the project root (overwrites any model-emitted ones).
+export function ensureLauncherFiles(files: FileSpec[]): FileSpec[] {
+    const out = files.filter((f) => f.path !== "start.bat" && f.path !== "start.sh");
+    out.push({ path: "start.bat", content: START_BAT });
+    out.push({ path: "start.sh",  content: START_SH });
     return out;
 }
 
@@ -240,13 +315,14 @@ export async function finalizeOutput(
     notes: string,
     engine: string,
 ) {
-    const withTrace = ensureTraceabilityFile(files, ctx.opmModel, ctx.spec);
-    await writeFiles(outDir, withTrace);
+    const withTrace     = ensureTraceabilityFile(files, ctx.opmModel, ctx.spec);
+    const withLaunchers = ensureLauncherFiles(withTrace);
+    await writeFiles(outDir, withLaunchers);
     return {
         root:       path.basename(outDir) + "/",
-        totalFiles: withTrace.length,
-        totalLines: withTrace.reduce((n, f) => n + f.content.split("\n").length, 0),
-        tree:       buildTree(withTrace),
+        totalFiles: withLaunchers.length,
+        totalLines: withLaunchers.reduce((n, f) => n + f.content.split("\n").length, 0),
+        tree:       buildTree(withLaunchers),
         outputDir:  outDir,
         notes,
         engine,
