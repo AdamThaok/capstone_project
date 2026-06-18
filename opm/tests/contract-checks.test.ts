@@ -3,6 +3,7 @@ import {
     schemaCasingIntegrityFailures,
     inlineBaseModelFailures,
     apiRouteCoverageFailures,
+    apiCallValidityFailures,
     modelColumnFailures,
 } from "@/opm/pipeline/agents/testing-agent";
 import type { FileSpec } from "@/opm/pipeline/agents/types";
@@ -64,6 +65,25 @@ describe("apiRouteCoverageFailures", () => {
             { path: "frontend/src/api.ts", content: "export const childAPI = { get: (id) => client.get(`/children/${id}`) }" },
         ];
         expect(apiRouteCoverageFailures(files)).toEqual([]);
+    });
+});
+
+describe("apiCallValidityFailures", () => {
+    it("flags an api.ts call with no matching backend route (404 risk)", () => {
+        const files: FileSpec[] = [
+            { path: "backend/routers.py", content: `@router.get("/children")\nasync def list_children(): ...\n` },
+            { path: "frontend/src/api.ts", content: "export const x = { go: () => client.post('/children/{id}/diagnose-and-treat') }" },
+        ];
+        const f = apiCallValidityFailures(files);
+        expect(f.some((x) => x.id.includes("diagnose-and-treat"))).toBe(true);
+    });
+
+    it("passes when every call matches a route", () => {
+        const files: FileSpec[] = [
+            { path: "backend/routers.py", content: `@router.get("/children/{id}")\nasync def get_child(): ...\n` },
+            { path: "frontend/src/api.ts", content: "export const x = { get: (id) => client.get(`/children/${id}`) }" },
+        ];
+        expect(apiCallValidityFailures(files)).toEqual([]);
     });
 });
 

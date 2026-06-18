@@ -380,6 +380,30 @@ export function modelColumnFailures(files: FileSpec[]): Failure[] {
     return out;
 }
 
+// The reverse of route-coverage: every api.ts call must hit an EXISTING backend route,
+// else it 404s at runtime. Together the two checks enforce front<->back route symmetry
+// (catches the failure where the frontend calls 100 endpoints the backend never defined).
+export function apiCallValidityFailures(files: FileSpec[]): Failure[] {
+    const be = fileEndingWith(files, "backend/routers.py");
+    const fe = fileEndingWith(files, "frontend/src/api.ts");
+    if (!be || !fe) return [];
+    const routes = new Set<string>();
+    let m: RegExpExecArray | null;
+    const rre = /@router\.(get|post|put|patch|delete)\(\s*[`'"]([^`'"]+)[`'"]/g;
+    while ((m = rre.exec(be.content)) !== null) routes.add(`${m[1].toLowerCase()} ${normRoute(m[2])}`);
+    const out: Failure[] = [];
+    const seen = new Set<string>();
+    const cre = /\.(get|post|put|patch|delete)\(\s*[`'"]([^`'"]+)[`'"]/g;
+    while ((m = cre.exec(fe.content)) !== null) {
+        const key = `${m[1].toLowerCase()} ${normRoute(m[2])}`;
+        if (!routes.has(key) && !seen.has(key)) {
+            seen.add(key);
+            out.push({ kind: "build_error", id: `api 404: ${m[1].toUpperCase()} ${normRoute(m[2])}`, detail: `frontend/src/api.ts calls ${m[1].toUpperCase()} ${m[2]} but no backend/routers.py route matches it — 404 at runtime. Align api.ts with the backend routes.` });
+        }
+    }
+    return out;
+}
+
 // Normalize a route/url path so backend templates and frontend template-literals compare:
 // "/children/{id}" and "/children/${id}" both -> "/children/{}".
 function normRoute(p: string): string {
@@ -615,6 +639,7 @@ export async function runTests(files: FileSpec[], ir: AgentIR): Promise<TestRepo
     for (const f of schemaCasingIntegrityFailures(files)) failures.push(f);
     for (const f of inlineBaseModelFailures(files)) failures.push(f);
     for (const f of apiRouteCoverageFailures(files)) failures.push(f);
+    for (const f of apiCallValidityFailures(files)) failures.push(f);
     for (const f of modelColumnFailures(files)) failures.push(f);
 
     // Tier 3: build & boot — expensive, env-gated. Run it once the tiers that

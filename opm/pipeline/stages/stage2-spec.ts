@@ -76,17 +76,23 @@ COVERAGE IS MANDATORY — this is a fidelity tool, you may NOT summarize, sample
   endpoint (never a parent-scoped filtered subset), and every reference target has both a list
   and a create endpoint.
 
-Entity vs. field (avoid a table per number — but do NOT over-collapse):
-- An object that plays a ROLE in any process — an AGENT (handles a process), an INSTRUMENT
-  (required by a process), a CONSUMEE/input, or a RESULTEE (yielded by a process) — OR that is
-  referenced by another object (an aggregation whole, or any FK target) MUST be a standalone
-  entity, NEVER a field. (For FTT: Child, Father, Mother, Therapist Group, Diagnosis, Treatment
-  Protocol, Implication Set, Perinatal/Postnatal Parameter Set, etc. are all standalone entities.)
-- ONLY a pure scalar parameter with NO process role and NO references (a lone number/weight/
-  length/percentile/severity/caloric value) becomes a typed FIELD of the entity that exhibits it.
-- Do NOT merge multiple distinct named objects into one generic "Measurement"/"Parameter" entity.
-- Create a standalone entity for an object that aggregates other objects (a "whole")
-  or that has its own states / lifecycle.
+Entity vs. field (CRITICAL — aim for ~10-15 entities; NOT 2, NOT 30+):
+- A STANDALONE ENTITY is an object that EITHER: handles a process (an AGENT — e.g. Father,
+  Mother, Therapist Group); OR aggregates other objects / is a "whole" with parts (e.g. Child,
+  Perinatal Parameter Set, Postnatal Parameter Set, Postnatal Growth Analysis, Diagnosis,
+  Treatment Protocol, Implication Set); OR has its own states/lifecycle; OR is referenced as a
+  whole (an FK target) by other objects.
+- A FIELD (NOT its own entity/table) is ANY scalar / single-value object — a number, weight,
+  length, percentile, PI value, severity, count, indication string, caloric value — EVEN IF a
+  process computes or yields it. A computed scalar RESULTEE is a typed FIELD of the entity it
+  belongs to, e.g. 48-month Percentile / Birth Percentile -> fields of Postnatal Parameter Set;
+  First/Last Trimester PI -> fields of Perinatal Parameter Set; Severity / Major Percentiles
+  Crossed -> fields of Postnatal Growth Analysis; Fetal Growth/Birth Weight Indication -> fields
+  of Diagnosis. NEVER promote a scalar to its own entity.
+- Do NOT merge distinct named domain objects into one generic "Measurement"/"Parameter" entity,
+  and do NOT promote scalars to entities. SELF-CHECK the count: if you have >20 entities you
+  wrongly promoted scalars (demote them to fields); if you have <6 you wrongly merged
+  agents/aggregates (split them out). For the FTT model the correct set is ~12 entities.
 - Every aggregation link (whole -> part) becomes a foreign key (or nested field) from part
   to whole.
 
