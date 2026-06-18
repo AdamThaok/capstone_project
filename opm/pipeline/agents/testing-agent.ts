@@ -310,6 +310,105 @@ export function tsconfigClosureFailures(files: FileSpec[]): Failure[] {
     return out;
 }
 
+// ── Contract-integrity checks (deterministic, always-on) ─────────────────────
+// Catch the front<->back contract drift the audit found: a per-class model_config
+// that clobbers the camelCase base, inline request models on BaseModel (422 on
+// camelCase), and backend routes with no api.ts caller (the process flow left
+// unreachable from the UI).
+
+function fileEndingWith(files: FileSpec[], suffix: string): FileSpec | undefined {
+    return files.find((f) => normPath(f.path).endsWith(suffix));
+}
+
+// schemas.py: once a shared CamelModel base exists, NO other schema may declare its
+// own model_config (it silently overrides alias_generator and re-breaks camelCase).
+export function schemaCasingIntegrityFailures(files: FileSpec[]): Failure[] {
+    const f = fileEndingWith(files, "backend/schemas.py");
+    if (!f || !/class\s+CamelModel\b/.test(f.content)) return [];
+    const out: Failure[] = [];
+    const lines = f.content.split("\n");
+    let cur = "";
+    for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(/^class\s+(\w+)\b/);
+        if (m) { cur = m[1]; continue; }
+        if (cur && cur !== "CamelModel" && /model_config\s*=/.test(lines[i])) {
+            out.push({ kind: "build_error", id: `schemas: ${cur}.model_config`, detail: `backend/schemas.py: class ${cur} (line ${i + 1}) declares its own model_config, overriding the shared CamelModel alias config and re-breaking camelCase. Remove it and inherit CamelModel.` });
+        }
+    }
+    return out;
+}
+
+// routers.py: inline process request models must subclass CamelModel, not BaseModel,
+// or they 422 on camelCase request bodies.
+export function inlineBaseModelFailures(files: FileSpec[]): Failure[] {
+    const f = fileEndingWith(files, "backend/routers.py");
+    if (!f) return [];
+    const out: Failure[] = [];
+    f.content.split("\n").forEach((l, i) => {
+        const m = l.match(/^class\s+(\w+)\(BaseModel\)/);
+        if (m) out.push({ kind: "build_error", id: `routers: ${m[1]}(BaseModel)`, detail: `backend/routers.py: inline request model ${m[1]} (line ${i + 1}) subclasses BaseModel — it 422s on camelCase bodies. Subclass CamelModel (from backend.schemas import CamelModel).` });
+    });
+    return out;
+}
+
+// models.py: each declarative model must use Column(<Type>, ...) for every attribute and
+// have a real primary-key Column — catches the malformed "id = String(36)" / no-PK pattern
+// statically (otherwise the app only fails at SQLAlchemy mapper init on boot).
+const COLUMN_TYPES = "String|Integer|Float|Boolean|Text|DateTime|JSON|Numeric|BigInteger|SmallInteger|Date|Time|LargeBinary";
+export function modelColumnFailures(files: FileSpec[]): Failure[] {
+    const f = fileEndingWith(files, "backend/models.py");
+    if (!f) return [];
+    const out: Failure[] = [];
+    const lines = f.content.split("\n");
+    const bareRe = new RegExp(`^\\s*(\\w+)\\s*=\\s*(${COLUMN_TYPES})\\(`);
+    let cur = "";
+    const pk: Record<string, boolean> = {};
+    const order: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+        const cm = lines[i].match(/^class\s+(\w+)\(Base\)/);
+        if (cm) { cur = cm[1]; if (!(cur in pk)) { pk[cur] = false; order.push(cur); } continue; }
+        if (!cur) continue;
+        const bare = lines[i].match(bareRe);
+        if (bare) {
+            out.push({ kind: "build_error", id: `models: ${cur}.${bare[1]} bare type`, detail: `backend/models.py: ${cur}.${bare[1]} (line ${i + 1}) assigns a bare ${bare[2]}(...) instead of Column(${bare[2]}(...)). Wrap every attribute in Column(...); a bare type breaks the SQLAlchemy mapper and the app won't boot.` });
+        }
+        if (/Column\([^)]*primary_key\s*=\s*True/.test(lines[i])) pk[cur] = true;
+    }
+    for (const c of order) {
+        if (!pk[c]) out.push({ kind: "build_error", id: `models: ${c} no PK`, detail: `backend/models.py: model ${c} has no Column(..., primary_key=True). Every model needs a primary key, e.g. id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4())).` });
+    }
+    return out;
+}
+
+// Normalize a route/url path so backend templates and frontend template-literals compare:
+// "/children/{id}" and "/children/${id}" both -> "/children/{}".
+function normRoute(p: string): string {
+    return p.replace(/\$\{[^}]+\}/g, "{}").replace(/\{[^}]+\}/g, "{}").replace(/\?.*$/, "").replace(/\/+$/, "") || "/";
+}
+
+// Every backend route should have a matching api.ts caller, else the endpoint is
+// unreachable from the UI (the FTT diagnose/treat process flow was left unwired).
+export function apiRouteCoverageFailures(files: FileSpec[]): Failure[] {
+    const be = fileEndingWith(files, "backend/routers.py");
+    const fe = fileEndingWith(files, "frontend/src/api.ts");
+    if (!be || !fe) return [];
+    const called = new Set<string>();
+    let m: RegExpExecArray | null;
+    const cre = /\.(get|post|put|patch|delete)\(\s*[`'"]([^`'"]+)[`'"]/g;
+    while ((m = cre.exec(fe.content)) !== null) called.add(`${m[1].toLowerCase()} ${normRoute(m[2])}`);
+    const out: Failure[] = [];
+    const seen = new Set<string>();
+    const rre = /@router\.(get|post|put|patch|delete)\(\s*[`'"]([^`'"]+)[`'"]/g;
+    while ((m = rre.exec(be.content)) !== null) {
+        const key = `${m[1].toLowerCase()} ${normRoute(m[2])}`;
+        if (!called.has(key) && !seen.has(key)) {
+            seen.add(key);
+            out.push({ kind: "build_error", id: `api wrapper: ${m[1].toUpperCase()} ${normRoute(m[2])}`, detail: `backend route ${m[1].toUpperCase()} ${m[2]} has no matching frontend/src/api.ts caller — unreachable from the UI. Add a typed api.ts wrapper (exact method/path/param-location) and wire it into a page.` });
+        }
+    }
+    return out;
+}
+
 // ── Tier 3: build & boot (real, expensive — env-gated) ───────────────────────
 // Writes the artifact to disk and actually builds it. Catches what the cheap
 // tiers can't: missing deps, broken imports, build failures.
@@ -511,6 +610,12 @@ export async function runTests(files: FileSpec[], ir: AgentIR): Promise<TestRepo
     for (const f of frontendResolvabilityFailures(files)) failures.push(f);
     for (const f of composeClosureFailures(files)) failures.push(f);
     for (const f of tsconfigClosureFailures(files)) failures.push(f);
+    // Contract integrity (front<->back): casing base intact, inline models on
+    // CamelModel, every route reachable from api.ts.
+    for (const f of schemaCasingIntegrityFailures(files)) failures.push(f);
+    for (const f of inlineBaseModelFailures(files)) failures.push(f);
+    for (const f of apiRouteCoverageFailures(files)) failures.push(f);
+    for (const f of modelColumnFailures(files)) failures.push(f);
 
     // Tier 3: build & boot — expensive, env-gated. Run it once the tiers that
     // actually affect the build are clean. We DELIBERATELY ignore invalid_formula

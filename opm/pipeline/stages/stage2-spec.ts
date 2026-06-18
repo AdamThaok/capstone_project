@@ -76,11 +76,16 @@ COVERAGE IS MANDATORY — this is a fidelity tool, you may NOT summarize, sample
   endpoint (never a parent-scoped filtered subset), and every reference target has both a list
   and a create endpoint.
 
-Entity vs. field (avoid a table per number):
-- A scalar/parameter object (a single number, weight, length, percentile, severity,
-  caloric value, etc.) becomes a typed FIELD of the entity that aggregates or exhibits
-  it — NOT its own table.
-- Create a standalone entity only for an object that aggregates other objects (a "whole")
+Entity vs. field (avoid a table per number — but do NOT over-collapse):
+- An object that plays a ROLE in any process — an AGENT (handles a process), an INSTRUMENT
+  (required by a process), a CONSUMEE/input, or a RESULTEE (yielded by a process) — OR that is
+  referenced by another object (an aggregation whole, or any FK target) MUST be a standalone
+  entity, NEVER a field. (For FTT: Child, Father, Mother, Therapist Group, Diagnosis, Treatment
+  Protocol, Implication Set, Perinatal/Postnatal Parameter Set, etc. are all standalone entities.)
+- ONLY a pure scalar parameter with NO process role and NO references (a lone number/weight/
+  length/percentile/severity/caloric value) becomes a typed FIELD of the entity that exhibits it.
+- Do NOT merge multiple distinct named objects into one generic "Measurement"/"Parameter" entity.
+- Create a standalone entity for an object that aggregates other objects (a "whole")
   or that has its own states / lifecycle.
 - Every aggregation link (whole -> part) becomes a foreign key (or nested field) from part
   to whole.

@@ -134,7 +134,15 @@ Hard constraints (non-negotiable):
   running "python -m uvicorn backend.main:app". NEVER generate "cd backend && uvicorn main:app".
 - SCHEMA CONTRACT: request bodies use *Create/*Update schemas; ALL responses use *Response
   schemas. Never use a *Create schema as a response_model; never return a hand-built dict where
-  a *Response exists. Every *Response sets model_config = ConfigDict(from_attributes=True).
+  a *Response exists. Define ONE shared base in schemas.py —
+  "class CamelModel(BaseModel): model_config = ConfigDict(alias_generator=to_camel,
+  populate_by_name=True, from_attributes=True)" (import: from pydantic.alias_generators import
+  to_camel) — and have EVERY schema inherit CamelModel (not BaseModel). This makes the JSON API
+  camelCase end-to-end so it matches the React frontend's camelCase keys, AND still accepts
+  snake_case. Do NOT give a schema a per-class model_config that drops these settings.
+- CASING CONTRACT (front<->back): the React frontend uses camelCase JSON keys; the CamelModel
+  base makes every request/response camelCase, so the two halves always agree. Frontend payload
+  keys and response reads are camelCase.
 - Every OPM Process/transition endpoint binds its dedicated typed Pydantic request schema
   (body: <Process>Request) — never a bare dict or .get(); let Pydantic enforce required fields
   (never "if not all([...])", which rejects a legitimate 0). Guard every nullable DB field with
@@ -357,7 +365,7 @@ export async function generateCode_stage4(
     // 2. Run the two-agent loop. It returns the finished files (build.artifact),
     //    how it ended (build.outcome), and how many passes it took.
     const opmModel = ctx.opmModel as AgentIR;
-    const build = await runBuildLoop(superPrompt.prompt, opmModel, { maxIters: 3, log });
+    const build = await runBuildLoop(superPrompt.prompt, opmModel, { maxIters: 5, log });
 
     // 3. Make a fresh output folder on disk for this job.
     const outDir = await prepareOutDir(ctx.jobId);

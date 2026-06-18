@@ -34,7 +34,7 @@ export async function askText(prompt: string, model = MODEL_TEXT, timeoutMs = CA
         model,
         generationConfig: {
             maxOutputTokens: 65_536,   // enough for large codegen responses
-            temperature:     0.4,
+            temperature:     0.2,      // low → stable, repeatable parse/spec across fresh runs
         },
     });
     const start = Date.now();
@@ -79,7 +79,7 @@ export async function askMultimodal(
 ): Promise<string> {
     const g = client().getGenerativeModel({
         model,
-        generationConfig: { maxOutputTokens: 65_536, temperature: 0.4 },
+        generationConfig: { maxOutputTokens: 65_536, temperature: 0.2 },
     });
     const start = Date.now();
     const res = await withTimeout(g.generateContent([

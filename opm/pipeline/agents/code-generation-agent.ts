@@ -68,7 +68,22 @@ const LAYERS: Layer[] = [
             "seed_db MUST be `async def seed_db(session)` taking that AsyncSession (the entry layer calls " +
             "`async with async_session() as s: await seed_db(s)`). The module's PUBLIC names are EXACTLY: " +
             "Base, engine, async_session, get_db, seed_db — later layers import these verbatim, so do not " +
-            "rename them.",
+            "rename them. " +
+            "CASING CONTRACT: schemas.py MUST define ONE shared base `class CamelModel(BaseModel): " +
+            "model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)` " +
+            "(import: from pydantic.alias_generators import to_camel) and EVERY Pydantic schema inherits " +
+            "CamelModel (never BaseModel directly, never a per-class model_config that omits these). This makes " +
+            "the JSON API camelCase end-to-end to match the React frontend, while still accepting snake_case. " +
+            "SCALAR TYPES: render each attribute with its modeled primitive type — an integer attribute is " +
+            "Integer in models.py and `int` in the schema (NEVER widened to float). ENUMS/STATES: an attribute " +
+            "with a fixed value set (e.g. Gender boy/girl, a status) is typed typing.Literal[...] (or a Python " +
+            "Enum) in BOTH the Create and Response schema — NEVER bare str — so an invalid value 422s at the " +
+            "boundary instead of silently flowing through to produce null/garbage downstream. " +
+            "MODELS (SQLAlchemy declarative): EVERY attribute is `Column(<Type>, ...)` — NEVER assign a bare " +
+            "type (WRONG: `id = String(36)`), NEVER set attributes on a type (WRONG: `id.primary_key = True`), " +
+            "and do NOT write a custom __init__ on a declarative model. EVERY model has a primary key: " +
+            "`id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))`. A model without a " +
+            "Column(primary_key=True) fails to boot (SQLAlchemy 'could not assemble any primary key columns').",
     },
     {
         name: "API",
@@ -99,7 +114,17 @@ const LAYERS: Layer[] = [
             "CRUD SCOPE: for every entity a USER MUST SUPPLY as input to a process (agents, instruments, " +
             "consumee/input objects), emit BOTH POST /<plural> (body=*Create) AND GET /<plural> (list, " +
             "response_model=List[*Response]). Do NOT emit create/update/delete for objects a process YIELDS " +
-            "(resultees) — those are produced by their process endpoint only.",
+            "(resultees) — those are produced by their process endpoint only. " +
+            "INLINE REQUEST MODELS: every inline process/transition request model in routers.py MUST subclass " +
+            "the shared CamelModel (`from backend.schemas import CamelModel`) — NEVER plain BaseModel — so " +
+            "process bodies accept camelCase. PARAM LOCATION: a scalar endpoint parameter NOT wrapped in Body() " +
+            "and NOT in the path template is a QUERY param — the frontend must send it in the query string, not " +
+            "the JSON body. RESULTEE DATAFLOW: when a process computes a result that a LATER process consumes, " +
+            "that result MUST be (a) a persisted column on the producing entity model, (b) a field on that " +
+            "entity's *Response, and (c) written to the ORM object before commit — NEVER computed into a local " +
+            "and discarded. Return the updated entity (or a dedicated response carrying the value) so it is " +
+            "visible to the UI and to the next process. GUARD 500s: before any division guard the divisor is " +
+            "non-zero; before int(s.split('-')) validate the string shape (422 on malformed, not 500).",
     },
     {
         name: "Backend entry",
@@ -129,7 +154,13 @@ const LAYERS: Layer[] = [
             "FORM REFERENCE FIELDS (mandatory): any form field whose submitted payload key ends in `_id` (it carries another entity's identifier) MUST render as a <select> bound to options loaded in the page's load effect — NEVER a free-text/paste-the-UUID <input>. In the page's useEffect/Promise.all, fetch the candidate records via the matching api.ts function for EVERY such field and store them in an option-state array; render one <option> per record using its id as value and a human-readable label (name, else id). Do not declare an option-state array or interface you never fetch into. " +
             "DROPDOWN OPTION SOURCE: a reference/foreign-key <select> MUST source its options from the TOP-LEVEL listing endpoint for that target entity (e.g. GET /diagnoses), matching how the backend validates the submitted id — NEVER from an owner/child-scoped or already-filtered endpoint. Do NOT add a client-side .filter() on a discriminator (e.g. d.type==='X') unless you call a dedicated listing endpoint guaranteed to return rows with that value (e.g. GET /diagnoses?type=X). Assume a freshly-seeded DB: any required <select> that could render zero options is a defect — surface a visible 'No options available' empty-state and disable the field instead of a silently empty required dropdown. " +
             "RESPONSE NORMALIZATION: list endpoints may return either an array or a single object; normalize with `Array.isArray(res.data) ? res.data : res.data ? [res.data] : []` before mapping. " +
-            "CREATE SURFACES: for every entity that is selected in any form, also emit a Create page (route /<plural>/new) that POSTs a new row via api.ts, add a 'New' link on that entity's list page, register the route in App.tsx, and add a create() method to that entity's api.ts object. Never ship a list page whose only states are a table and an empty-state with no way to add a record.",
+            "CREATE SURFACES: for every entity that is selected in any form, also emit a Create page (route /<plural>/new) that POSTs a new row via api.ts, add a 'New' link on that entity's list page, register the route in App.tsx, and add a create() method to that entity's api.ts object. Never ship a list page whose only states are a table and an empty-state with no way to add a record. " +
+            "CREATE-FORM COMPLETENESS: each Create page MUST collect EVERY required (non-Optional) field of that entity's *Create schema — including foreign-key fields (payload keys ending in _id), which render as a <select> populated from the referenced entity's global list endpoint (never omitted, never a free-text id). A 422 on submit means the form is missing a required field. " +
+            "CASING: send request payload keys in camelCase and read response keys in camelCase (the backend's CamelModel base makes the API camelCase). " +
+            "NULLABILITY: a TS interface field is `T | null` iff the backend field is Optional/nullable; guard reads of nullable fields (e.g. `{x ?? '-'}`) so a null never renders as 'undefined' or crashes. " +
+            "NUMERIC PARSE: parse int fields with parseInt(v, 10) (input step=\"1\" min=\"0\") and float fields with parseFloat(v) (step=\"any\"); for an empty Optional numeric field OMIT the key rather than sending NaN. " +
+            "FK LABELS: a reference <select> option label MUST be human-readable — use a descriptive field if one exists, else a COMPOSITE of the row's scalar fields plus a short id slice (e.g. `${c.ageMonths}mo ${c.gender} (${c.id.slice(-6)})`); NEVER render the raw UUID as the only label. " +
+            "PROCESS/ACTION WIRING: for EVERY backend endpoint that is not plain entity CRUD (nested /{id}/<action> POST/PUT routes, compute/transition endpoints), emit a typed api.ts wrapper with the EXACT method + path + param-location, AND surface it in the UI — build an orchestration page (e.g. a Child detail / 'Diagnose & Treat' page) with buttons that invoke those actions in the modeled sequence and display their results, registered as a route in App.tsx. EVERY backend route must have a matching api.ts call — a route with no frontend caller is a defect.",
     },
     {
         name: "Config",
@@ -187,7 +218,7 @@ function reconcileFrontendDeps(files: FileSpec[], log: Progress): void {
     let json: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
     try { json = JSON.parse(pkg.content); } catch { return; } // malformed — leave for the loop to fix
     const deps = json.dependencies ?? (json.dependencies = {});
-    const dev  = json.devDependencies ?? {};
+    const dev  = json.devDependencies ?? (json.devDependencies = {});
 
     const imported = new Set<string>();
     for (const f of files) {
@@ -203,10 +234,56 @@ function reconcileFrontendDeps(files: FileSpec[], log: Progress): void {
         deps[root] = ver;
         added.push(`${root}@${ver}`);
     }
+    // Config-file devDeps that aren't `import`ed from .tsx (so the import scan misses
+    // them) but ARE required to build: postcss.config.js / tailwind.config.js reference
+    // tailwindcss/autoprefixer/postcss, and `@tailwind` in CSS needs tailwindcss. A
+    // postcss config naming a plugin not in package.json fails `vite build` outright.
+    const FE_DEV_VERSIONS: Record<string, string> = { tailwindcss: "^3", postcss: "^8", autoprefixer: "^10" };
+    const cfgText = files
+        .filter((f) => /frontend\/(postcss\.config|tailwind\.config)\.[cm]?[jt]s$/.test(f.path) || /frontend\/.*\.css$/.test(f.path))
+        .map((f) => f.content)
+        .join("\n");
+    const usesTailwind = /tailwindcss/.test(cfgText) || /@tailwind\b/.test(cfgText);
+    for (const [name, ver] of Object.entries(FE_DEV_VERSIONS)) {
+        const needed = name === "tailwindcss" ? usesTailwind : cfgText.includes(name) || usesTailwind;
+        if (needed && !dev[name] && !deps[name]) { dev[name] = ver; added.push(`${name}@${ver} (dev)`); }
+    }
     if (added.length) {
         pkg.content = JSON.stringify(json, null, 2);
         log(`📦 Dependency reconciler: added ${added.join(", ")} to frontend/package.json.`);
     }
+}
+
+// Make frontend/tsconfig.json self-contained: strip any references/extends pointing
+// at a file we did NOT emit (a dangling "./tsconfig.node.json" reference breaks
+// `vite build`). The model fixes this inconsistently, so enforce it deterministically.
+function reconcileTsconfig(files: FileSpec[], log: Progress): void {
+    const ts = files.find((f) => f.path.endsWith("frontend/tsconfig.json"));
+    if (!ts) return;
+    let j: { references?: { path?: string }[]; extends?: string };
+    try { j = JSON.parse(ts.content); } catch { return; }
+    const have = new Set(files.map((f) => f.path.replace(/^[\\/]+/, "")));
+    const resolve = (ref: string) => ("frontend/" + ref.replace(/^\.\//, "").replace(/^\//, "")).replace(/\/\.\//g, "/");
+    let changed = false;
+    if (Array.isArray(j.references)) {
+        const kept = j.references.filter((r) => r && r.path && have.has(resolve(r.path)));
+        if (kept.length !== j.references.length) { j.references = kept; changed = true; }
+    }
+    if (typeof j.extends === "string" && j.extends.startsWith(".") && !have.has(resolve(j.extends))) {
+        delete j.extends; changed = true;
+    }
+    if (changed) {
+        ts.content = JSON.stringify(j, null, 2);
+        log("🔧 tsconfig reconciler: stripped dangling references/extends (self-contained).");
+    }
+}
+
+// Deterministic post-generation normalization applied to EVERY produced artifact
+// (initial, each reflective fix, and integration repair) so model inconsistencies
+// in the manifest/tsconfig can never ship or stall the loop.
+function normalizeArtifact(files: FileSpec[], log: Progress): void {
+    reconcileFrontendDeps(files, log);
+    reconcileTsconfig(files, log);
 }
 
 // Action 1: first-pass generation — built LAYER BY LAYER (not one giant stream),
@@ -233,9 +310,9 @@ export async function generateInitialCode(
         log(`✅ ${layer.name}: ${files.length} file(s) (total ${written.length}).`);
     }
 
-    // Deterministic dependency reconciliation: ensure package.json declares every
-    // frontend import (the Config layer can miss one, e.g. react-router-dom).
-    reconcileFrontendDeps(written, log);
+    // Deterministic normalization: package.json declares every frontend import, and
+    // tsconfig is self-contained (no dangling references) — model-independent.
+    normalizeArtifact(written, log);
 
     // Safety net: if the layered pass produced too little, fall back to one-shot.
     if (written.length < 3) {
@@ -564,7 +641,9 @@ export async function regenerateFromReflection(
         onProgress,
     );
     const patches = parseDelimitedFiles(text);
-    return mergeFiles(prevFiles, patches);
+    const merged = mergeFiles(prevFiles, patches);
+    normalizeArtifact(merged, log);
+    return merged;
 }
 
 // A stronger model for the FINAL whole-repo integration pass — cross-file wiring
@@ -615,7 +694,9 @@ ${files.map((f) => `===FILE: ${f.path}===\n${f.content}\n===END===`).join("\n\n"
         onProgress,
     );
     const patches = parseDelimitedFiles(text);
-    return mergeFiles(files, patches);
+    const merged = mergeFiles(files, patches);
+    normalizeArtifact(merged, onProgress ?? (() => { /* no-op */ }));
+    return merged;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
