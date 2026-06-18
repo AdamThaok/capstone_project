@@ -22,6 +22,7 @@ import { generateCode_stage4 }     from "./stage4-codegen";
 import { validateGenerated_stage5 } from "./stage5-validate";
 import { deployToCloud_stage6 }     from "./stage6-deploy";
 import { updateStage, getJob, patchJob, appendStageLog } from "../infra/jobs";
+import { computeCacheKey, readPrepCache, writePrepCache } from "../infra/cache";
 import type { StageId, CoverageReport, CoverageSnapshot, QaReport } from "../infra/types";
 import { validateOpmModel, type OpmModel } from "../opm/opm-validate";
 
@@ -274,6 +275,12 @@ function logValidateStart(jobId: string): void {
     appendStageLog(jobId, "validate", "📊 Computing traceability coverage report...");
 }
 
+// Mark a stage done from cache (no work run) and highlight it in the dashboard.
+function markStageCached(jobId: string, stage: StageId, label: string, output: unknown): void {
+    appendStageLog(jobId, stage, `♻️ Using cached result — skipping ${label}.`);
+    updateStage(jobId, stage, { status: "done", output, finishedAt: new Date().toISOString() });
+}
+
 export async function runPipeline(jobId: string) {
     const job = getJob(jobId);
     if (!job) throw new Error(`job ${jobId} not found`);
@@ -295,50 +302,77 @@ export async function runPipeline(jobId: string) {
     }
     logStage0Pass(jobId);
 
-    // Stages 1 + 1b: parse OPM in parallel with RAG retrieval.
-    await sleep(STAGE_DELAY_MS);
-    logParseStart(jobId, job.filenames);
-    const parseStart = Date.now();
-    const [opmModel, _ragStub] = await Promise.all([
-        
-        runStage(jobId, "parse", () =>
-            parseOpm_stage1({
-                filenames:  job.filenames,
-                filePaths:  job.filePaths,
-                format:     job.format,
-                timeoutMs:  PARSE_TIMEOUT_MS,
-                onProgress: (msg) => appendStageLog(jobId, "parse", msg),
-            }),
-        ),
-        runStage(jobId, "rag", async () => ({
-            retrievalMode: "inline-iso-19450",
-            chunks: 8,
-            note:   "Static rules injected into super-prompt at stage 3 compose.",
-        })),
-    ]);
-    logParseDone(jobId, parseStart);
-    if (!opmModel) return;
+    // ── Stages 1-3 (parse → spec → super-prompt) — cached as a unit ──────────
+    // These are deterministic for a given input, so a repeat upload skips them
+    // and jumps to Stage 4. (Stage 4 codegen is never cached.)
+    const cacheKey = computeCacheKey(job.filePaths, job.format);
+    const cached   = readPrepCache(cacheKey);
 
-    // ---- OPM diagram validation gate (ISO 19450) ----
-    // Blocking errors stop the pipeline; warnings are recorded and we continue.
-    await sleep(STAGE_DELAY_MS);
-    if (runOpmValidationGate(jobId, opmModel)) return;
+    let opmModel:    OpmModel;
+    let spec:        unknown;
+    let superPrompt: { prompt: string; retrievedChunks?: number; models?: string[] };
+    let counts:      ElementCounts;
 
-    const counts = logParseResults(jobId, opmModel);
+    if (cached) {
+        opmModel    = cached.opmModel as OpmModel;
+        spec        = cached.spec;
+        superPrompt = cached.superPrompt;
+        markStageCached(jobId, "parse",    "Stage 1 (OPM parsing)", opmModel);
+        markStageCached(jobId, "rag",      "Stage 1b (RAG rules)",  { retrievalMode: "cached", chunks: 8 });
+        markStageCached(jobId, "semantic", "Stage 2 (system spec)", spec);
+        appendStageLog(jobId, "generate", "♻️ Using cached super-prompt — skipping Stage 3 (compose).");
+        counts = logParseResults(jobId, opmModel);
+    } else {
+        // Stages 1 + 1b: parse in parallel with the RAG stub.
+        await sleep(STAGE_DELAY_MS);
+        logParseStart(jobId, job.filenames);
+        const parseStart = Date.now();
+        const [parsed] = await Promise.all([
+            runStage(jobId, "parse", () =>
+                parseOpm_stage1({
+                    filenames:  job.filenames,
+                    filePaths:  job.filePaths,
+                    format:     job.format,
+                    timeoutMs:  PARSE_TIMEOUT_MS,
+                    onProgress: (msg) => appendStageLog(jobId, "parse", msg),
+                }),
+            ),
+            runStage(jobId, "rag", async () => ({
+                retrievalMode: "inline-iso-19450",
+                chunks: 8,
+                note:   "Static rules injected into super-prompt at stage 3 compose.",
+            })),
+        ]);
+        logParseDone(jobId, parseStart);
+        if (!parsed) return;
+        opmModel = parsed as OpmModel;
 
-    // Stage 2: semantic interpretation
-    await sleep(STAGE_DELAY_MS);
-    logSemanticStart(jobId);
-    const spec = await runStage(jobId, "semantic", () => deriveSpec_stage2(opmModel));
-    if (!spec) return;
-    logSemanticDone(jobId);
+        // OPM diagram validation gate (ISO 19450) — blocking errors stop here.
+        await sleep(STAGE_DELAY_MS);
+        if (runOpmValidationGate(jobId, opmModel)) return;
+        counts = logParseResults(jobId, opmModel);
 
-    // Stage 3-4: super-prompt + code generation
-    await sleep(STAGE_DELAY_MS);
-    logGenerateStart(jobId);
-    const fileTree = await runStage(jobId, "generate", async () => {
-        const superPrompt = await buildSuperPrompt_stage3(opmModel, spec);
+        // Stage 2: semantic interpretation.
+        await sleep(STAGE_DELAY_MS);
+        logSemanticStart(jobId);
+        const derivedSpec = await runStage(jobId, "semantic", () => deriveSpec_stage2(opmModel));
+        if (!derivedSpec) return;
+        spec = derivedSpec;
+        logSemanticDone(jobId);
+
+        // Stage 3: compose the super-prompt, then cache the whole prep.
+        await sleep(STAGE_DELAY_MS);
+        logGenerateStart(jobId);
+        superPrompt = await buildSuperPrompt_stage3(opmModel, spec);
         logSuperPromptBuilt(jobId);
+        writePrepCache(cacheKey, { opmModel, spec, superPrompt });
+        appendStageLog(jobId, "generate", "💾 Cached parse + spec + super-prompt for re-runs.");
+    }
+
+    // ── Stage 4: code generation (never cached) ──────────────────────────────
+    await sleep(STAGE_DELAY_MS);
+    appendStageLog(jobId, "generate", "🤖 Code Generation Agent + Testing Agent: generate → test → reflect loop…");
+    const fileTree = await runStage(jobId, "generate", async () => {
         const gen = await generateCode_stage4(superPrompt, { jobId, opmModel, spec });
         if (gen && typeof gen === "object" && "outputDir" in gen) {
             patchJob(jobId, { outputDir: (gen as { outputDir?: string }).outputDir });

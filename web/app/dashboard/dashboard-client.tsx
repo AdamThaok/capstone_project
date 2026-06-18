@@ -201,6 +201,21 @@ export default function DashboardClient({ initialJobId }: { initialJobId?: strin
         if (fileInput.current) fileInput.current.value = "";
     }
 
+    // Wipe the parse/spec/super-prompt cache so the next run re-does stages 1-3.
+    const [clearing, setClearing] = useState(false);
+    async function clearCache() {
+        setClearing(true);
+        try {
+            const res = await fetch("/api/cache/clear", { method: "POST" });
+            const data = await res.json().catch(() => ({}));
+            alert(res.ok ? `Cache cleared (${data.cleared ?? 0} entr${(data.cleared ?? 0) === 1 ? "y" : "ies"}). Next run re-does stages 1-3.` : "Failed to clear cache.");
+        } catch {
+            alert("Failed to clear cache.");
+        } finally {
+            setClearing(false);
+        }
+    }
+
     // Re-run ONLY Stage 5 (validation + QA) against the already-generated code —
     // no parse/semantic/generate. Lets the user re-run the acceptance tests and
     // unblock deploy without paying for a full regeneration.
@@ -352,6 +367,10 @@ export default function DashboardClient({ initialJobId }: { initialJobId?: strin
                             {(files.length > 0 || job) && !running && (
                                 <button className="ghost" onClick={reset}>Reset</button>
                             )}
+                            <button className="ghost" onClick={clearCache} disabled={clearing}
+                                title="Clear the cached parse/spec/super-prompt so the next run re-does stages 1-3">
+                                {clearing ? "Clearing…" : "Clear cache"}
+                            </button>
                         </div>
                     </div>
 
