@@ -18,8 +18,10 @@ import { validateInput_stage0 }     from "./stage0-validate";
 import { parseOpm_stage1, PARSE_TIMEOUT_MS } from "./stage1-parse";
 import { deriveSpec_stage2 }        from "./stage2-spec";
 import { buildSuperPrompt_stage3 }  from "./stage3-rag";
-import { generateCode_stage4 }      from "./stage4-codegen";
+import { prepareOutDir, finalizeOutput } from "./stage4-codegen";
 import { validateGenerated_stage5 } from "./stage5-validate";
+import { runBuildLoop }             from "../agents/orchestrator";
+import type { AgentIR }             from "../agents/types";
 import { deployToCloud_stage6 }     from "./stage6-deploy";
 import { updateStage, getJob, patchJob, appendStageLog } from "../infra/jobs";
 import type { StageId, CoverageReport, CoverageSnapshot, QaReport } from "../infra/types";
@@ -261,8 +263,7 @@ function logSemanticDone(jobId: string): void {
 }
 function logGenerateStart(jobId: string): void {
     appendStageLog(jobId, "generate", "📝 Composing super-prompt from OPM IR + System Spec + ISO rules...");
-    appendStageLog(jobId, "generate", "⚡ Pass 1 — Gemini Flash: generating full project skeleton (~40-60s)...");
-    appendStageLog(jobId, "generate", "🔵 Pass 2 — Claude Haiku: will refine critical files (models, routes, API)...");
+    appendStageLog(jobId, "generate", "🤖 Code Generation Agent + Testing Agent: generate → test → reflect loop...");
 }
 function logSuperPromptBuilt(jobId: string): void {
     appendStageLog(jobId, "generate", "✅ Super-prompt built — sending to code generation model...");
@@ -340,12 +341,23 @@ export async function runPipeline(jobId: string) {
     const fileTree = await runStage(jobId, "generate", async () => {
         const superPrompt = await buildSuperPrompt_stage3(opmModel, spec);
         logSuperPromptBuilt(jobId);
-        const gen = await generateCode_stage4(superPrompt, { jobId, opmModel, spec });
-        // Persist the generated tree path on the job for download route.
-        if (gen && typeof gen === "object" && "outputDir" in gen) {
-            patchJob(jobId, { outputDir: (gen as { outputDir?: string }).outputDir });
-            logGenerated(jobId, gen as Record<string, unknown>);
-        }
+
+        // Two-agent build loop: the Code Generation Agent and the Testing Agent,
+        // driven by the orchestrator (generate -> test -> reflect -> regenerate)
+        // until the tests pass, the iteration budget is spent, or it stalls.
+        const build = await runBuildLoop(superPrompt.prompt, opmModel as unknown as AgentIR, {
+            maxIters: 3,
+            log: (m) => appendStageLog(jobId, "generate", m),
+        });
+
+        // Write the converged artifact to disk and build the generate-stage summary.
+        const outDir = await prepareOutDir(jobId);
+        const gen = await finalizeOutput(
+            outDir, build.artifact, { opmModel, spec },
+            `agentic loop: ${build.outcome} after ${build.iterations} pass(es)`, "claude",
+        );
+        patchJob(jobId, { outputDir: gen.outputDir });
+        logGenerated(jobId, gen as Record<string, unknown>);
         return gen;
     });
     if (!fileTree) return;

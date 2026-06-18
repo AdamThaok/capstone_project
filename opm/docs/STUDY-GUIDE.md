@@ -53,8 +53,8 @@ In every stage file, skip these on the first pass — they're plumbing, not idea
 | 1 | `parseOpm_stage1` | `pipeline/stages/stage1-parse.ts` | Send the diagram to a vision model → get back structured OPM data (the "IR"). |
 | 2 | `deriveSpec_stage2` | `pipeline/stages/stage2-spec.ts` | Ask a model to turn the IR into a software spec (entities, endpoints, screens). |
 | 3 | `buildSuperPrompt_stage3` | `pipeline/stages/stage3-rag.ts` | Combine IR + spec + ISO-19450 rules into one big "build-this" prompt. |
-| 4 | `generateCode_stage4` | `pipeline/stages/stage4-codegen.ts` | Send that prompt to Claude → write the React+FastAPI project files to disk. |
-| 5 | `validateGenerated_stage5` | `pipeline/stages/stage5-validate.ts` | Check the code covers every OPM element; loop-fix the gaps; emit the report. |
+| 4 | `runBuildLoop` | `pipeline/agents/orchestrator.ts` | The two-agent loop: Code Generation Agent writes code, Testing Agent checks it, reflect + regenerate until it passes. Writes the project to disk. |
+| 5 | `validateGenerated_stage5` | `pipeline/stages/stage5-validate.ts` | Final coverage + QA report for the dashboard. |
 
 That's **~6 short functions**. Everything else is detail you pull in only if asked.
 
@@ -75,19 +75,22 @@ stage's input is the previous stage's output.
 
 ---
 
-## The "agent" (the part teachers ask about)
+## The two agents (the part teachers ask about)
 
-The agent = the **self-healing loop** in Stage 5, `runRefinementLoop`
-(`pipeline/stages/stage5-validate.ts`). It's perceive → decide → act:
+There are **two agents** wired into a loop, in `pipeline/agents/`:
 
-- **perceive** → `coverageCheck` scans the generated code for every OPM id.
-- **decide** → `while (gaps remain && iter < MAX_ITERS)`.
-- **act** → `refine(...)` asks the model to patch the missing pieces.
-- …then re-scan and loop. No human in between.
+- **Code Generation Agent** (`code-generation-agent.ts`) — writes code, and on
+  failure reflects + regenerates. It never judges its own output.
+- **Testing Agent** (`testing-agent.ts`) — independently checks the code and emits
+  a structured report: required files, OPM-id coverage, and a `new Function` parse
+  check that deterministically catches broken formulas (e.g. a dropped `*`).
+- **Orchestrator** (`orchestrator.ts`) — the loop that drives them, perceive →
+  decide → act: generate → test → reflect → regenerate, with a stopping condition
+  (`decideHalt`: all tests pass / iteration budget spent / repeated-failure stall).
 
-Supporting evidence to point at: `opm/docs/smart-agent/smart_agent.py` (a runnable
-180-line demo of this exact loop) and `agent_architecture.json` (maps each agent
-layer to the real file).
+Keeping testing separate from generation is what stops the model "grading its own
+homework." The loop is wired into the live pipeline at the `generate` stage in
+`runner.ts`.
 
 ---
 
@@ -96,8 +99,8 @@ layer to the real file).
 - **Day 1 — concepts.** `knowledge/02_core_ontology.md` (what OPM objects/processes/links are) + skim `docs/smart-agent/smart_agent.py` (the agent loop in plain Python).
 - **Day 2 — the spine.** `runner.ts` → `runPipeline`. Read it top to bottom; it names all 6 stages.
 - **Day 3 — Stages 1 & 2.** `parseOpm_stage1`, then `deriveSpec_stage2`. Open the two matching sample JSONs.
-- **Day 4 — Stages 3 & 4.** `buildSuperPrompt_stage3`, `generateCode_stage4`. Open `super_prompt.txt` + `file_tree.json`.
-- **Day 5 — Stage 5 + the agent.** `validateGenerated_stage5` → `runRefinementLoop`. Open `validation_report.json`.
+- **Day 4 — Stage 3 + the build loop.** `buildSuperPrompt_stage3`, then the two-agent loop in `pipeline/agents/` (`orchestrator.ts` → `runBuildLoop`). Open `super_prompt.txt` + `file_tree.json`.
+- **Day 5 — the agents.** `testing-agent.ts` (how failure is detected) + `orchestrator.ts` (`decideHalt` stopping conditions). Open `validation_report.json`.
 - **Day 6 — fidelity story.** `pipeline/opm/opm-validate.ts` (the ISO gate) + `pipeline/opm/traceability.ts` (OPM→code mapping). This is your "100% coverage / no hallucination" pitch.
 - **Day 7 — rehearse.** Explain each stage out loud in one sentence (table above). If you can do that, you can defend it.
 
