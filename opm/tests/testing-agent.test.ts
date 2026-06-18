@@ -14,35 +14,43 @@ const irWith = (computation: string): AgentIR => ({
     processes: [{ id: "P1", name: "Calc", computation }],
 });
 
+// Gemini is not configured in tests, so Tier 4 (acceptance) is skipped and the
+// report is fully deterministic.
 describe("testing-agent formula detector", () => {
-    it("flags a computation with a dropped '*' operator", () => {
-        const report = runTests(FILES, irWith("return (Mft/Math.pow(Lft,3))100;"));
+    it("flags a computation with a dropped '*' operator", async () => {
+        const report = await runTests(FILES, irWith("return (Mft/Math.pow(Lft,3))100;"));
         expect(report.passed).toBe(false);
         expect(report.failures.some((f) => f.kind === "invalid_formula" && f.id === "P1")).toBe(true);
     });
 
-    it("accepts the same computation once the '*' is present", () => {
-        const report = runTests(FILES, irWith("return (Mft/Math.pow(Lft,3))*100;"));
+    it("accepts the same computation once the '*' is present", async () => {
+        const report = await runTests(FILES, irWith("return (Mft/Math.pow(Lft,3))*100;"));
         expect(report.failures.some((f) => f.kind === "invalid_formula")).toBe(false);
     });
 
-    it("accepts multi-statement computations (undefined vars are fine — parse only)", () => {
-        const report = runTests(FILES, irWith("let w = period1Weight*pc1; return w;"));
+    it("accepts multi-statement computations (undefined vars are fine — parse only)", async () => {
+        const report = await runTests(FILES, irWith("let w = period1Weight*pc1; return w;"));
         expect(report.failures.some((f) => f.kind === "invalid_formula")).toBe(false);
     });
 });
 
 describe("testing-agent structural detector", () => {
-    it("flags an uncovered OPM id", () => {
+    it("flags an uncovered OPM id", async () => {
         const ir: AgentIR = { objects: [{ id: "O9" }], processes: [] };
-        const report = runTests(FILES, ir); // O9 not present anywhere
+        const report = await runTests(FILES, ir); // O9 not present anywhere
         expect(report.failures.some((f) => f.kind === "uncovered_id" && f.id === "O9")).toBe(true);
     });
 
-    it("flags a missing required file", () => {
+    it("flags a missing required file", async () => {
         const partial: FileSpec[] = [{ path: "README.md", content: "O1 P1" }];
-        const report = runTests(partial, irWith("return 1;"));
+        const report = await runTests(partial, irWith("return 1;"));
         expect(report.failures.some((f) => f.kind === "missing_file")).toBe(true);
+    });
+
+    it("reports coverage for the dashboard", async () => {
+        const report = await runTests(FILES, irWith("return 1;"));
+        expect(report.coverage.total_elements).toBe(2); // O1 + P1
+        expect(report.coverage.coverage_pct).toBe(100);
     });
 });
 

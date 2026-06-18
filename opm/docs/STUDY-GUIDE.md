@@ -53,7 +53,7 @@ In every stage file, skip these on the first pass — they're plumbing, not idea
 | 1 | `parseOpm_stage1` | `pipeline/stages/stage1-parse.ts` | Send the diagram to a vision model → get back structured OPM data (the "IR"). |
 | 2 | `deriveSpec_stage2` | `pipeline/stages/stage2-spec.ts` | Ask a model to turn the IR into a software spec (entities, endpoints, screens). |
 | 3 | `buildSuperPrompt_stage3` | `pipeline/stages/stage3-rag.ts` | Combine IR + spec + ISO-19450 rules into one big "build-this" prompt. |
-| 4 | `runBuildLoop` | `pipeline/agents/orchestrator.ts` | The two-agent loop: Code Generation Agent writes code, Testing Agent checks it, reflect + regenerate until it passes. Writes the project to disk. |
+| 4 | `generateCode_stage4` | `pipeline/stages/stage4-codegen.ts` | Stage-4 entry: runs the two-agent loop (`runBuildLoop` in `agents/orchestrator.ts`) and writes the project to disk. |
 | 5 | `validateGenerated_stage5` | `pipeline/stages/stage5-validate.ts` | Final coverage + QA report for the dashboard. |
 
 That's **~6 short functions**. Everything else is detail you pull in only if asked.
@@ -99,7 +99,7 @@ homework." The loop is wired into the live pipeline at the `generate` stage in
 - **Day 1 — concepts.** `knowledge/02_core_ontology.md` (what OPM objects/processes/links are) + skim `docs/smart-agent/smart_agent.py` (the agent loop in plain Python).
 - **Day 2 — the spine.** `runner.ts` → `runPipeline`. Read it top to bottom; it names all 6 stages.
 - **Day 3 — Stages 1 & 2.** `parseOpm_stage1`, then `deriveSpec_stage2`. Open the two matching sample JSONs.
-- **Day 4 — Stage 3 + the build loop.** `buildSuperPrompt_stage3`, then the two-agent loop in `pipeline/agents/` (`orchestrator.ts` → `runBuildLoop`). Open `super_prompt.txt` + `file_tree.json`.
+- **Day 4 — Stage 3 + the build loop.** `buildSuperPrompt_stage3`, then `generateCode_stage4` (`stage4-codegen.ts`) → the two-agent loop in `pipeline/agents/` (`orchestrator.ts` → `runBuildLoop`). Open `super_prompt.txt` + `file_tree.json`.
 - **Day 5 — the agents.** `testing-agent.ts` (how failure is detected) + `orchestrator.ts` (`decideHalt` stopping conditions). Open `validation_report.json`.
 - **Day 6 — fidelity story.** `pipeline/opm/opm-validate.ts` (the ISO gate) + `pipeline/opm/traceability.ts` (OPM→code mapping). This is your "100% coverage / no hallucination" pitch.
 - **Day 7 — rehearse.** Explain each stage out loud in one sentence (table above). If you can do that, you can defend it.

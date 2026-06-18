@@ -18,10 +18,8 @@ import { validateInput_stage0 }     from "./stage0-validate";
 import { parseOpm_stage1, PARSE_TIMEOUT_MS } from "./stage1-parse";
 import { deriveSpec_stage2 }        from "./stage2-spec";
 import { buildSuperPrompt_stage3 }  from "./stage3-rag";
-import { prepareOutDir, finalizeOutput } from "./stage4-codegen";
+import { generateCode_stage4 }     from "./stage4-codegen";
 import { validateGenerated_stage5 } from "./stage5-validate";
-import { runBuildLoop }             from "../agents/orchestrator";
-import type { AgentIR }             from "../agents/types";
 import { deployToCloud_stage6 }     from "./stage6-deploy";
 import { updateStage, getJob, patchJob, appendStageLog } from "../infra/jobs";
 import type { StageId, CoverageReport, CoverageSnapshot, QaReport } from "../infra/types";
@@ -341,23 +339,11 @@ export async function runPipeline(jobId: string) {
     const fileTree = await runStage(jobId, "generate", async () => {
         const superPrompt = await buildSuperPrompt_stage3(opmModel, spec);
         logSuperPromptBuilt(jobId);
-
-        // Two-agent build loop: the Code Generation Agent and the Testing Agent,
-        // driven by the orchestrator (generate -> test -> reflect -> regenerate)
-        // until the tests pass, the iteration budget is spent, or it stalls.
-        const build = await runBuildLoop(superPrompt.prompt, opmModel as unknown as AgentIR, {
-            maxIters: 3,
-            log: (m) => appendStageLog(jobId, "generate", m),
-        });
-
-        // Write the converged artifact to disk and build the generate-stage summary.
-        const outDir = await prepareOutDir(jobId);
-        const gen = await finalizeOutput(
-            outDir, build.artifact, { opmModel, spec },
-            `agentic loop: ${build.outcome} after ${build.iterations} pass(es)`, "claude",
-        );
-        patchJob(jobId, { outputDir: gen.outputDir });
-        logGenerated(jobId, gen as Record<string, unknown>);
+        const gen = await generateCode_stage4(superPrompt, { jobId, opmModel, spec });
+        if (gen && typeof gen === "object" && "outputDir" in gen) {
+            patchJob(jobId, { outputDir: (gen as { outputDir?: string }).outputDir });
+            logGenerated(jobId, gen as Record<string, unknown>);
+        }
         return gen;
     });
     if (!fileTree) return;

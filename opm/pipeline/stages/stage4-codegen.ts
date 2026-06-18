@@ -14,6 +14,9 @@ import {
     CODEGEN_MODEL as CLAUDE_CODEGEN_MODEL,
 } from "@/opm/pipeline/llm/claude";
 import { generateTraceabilityMd } from "../opm/traceability";
+import { runBuildLoop } from "../agents/orchestrator";
+import type { AgentIR } from "../agents/types";
+import { appendStageLog } from "../infra/jobs";
 
 type FileSpec = { path: string; content: string };
 type TreeNode = { path: string; lines?: number };
@@ -237,4 +240,43 @@ export async function finalizeOutput(
         notes,
         engine,
     };
+}
+
+// ── Stage 4 entry point ──────────────────────────────────────────────────────
+
+// Build a logger that prints progress to the console AND the job's dashboard.
+function makeStageLogger(jobId: string): (message: string) => void {
+    return (message: string) => {
+        console.info(`[stage4] ${message}`);
+        if (!jobId) return;
+        try {
+            appendStageLog(jobId, "generate", message);
+        } catch {
+            // ignore dashboard logging errors — they must not stop generation
+        }
+    };
+}
+
+// Runs the two-agent build loop (Code Generation Agent <-> Testing Agent), then
+// writes the converged artifact to disk and returns the generate-stage summary
+// for the dashboard + download route.
+export async function generateCode_stage4(
+    superPrompt: { prompt: string; retrievedChunks?: number; models?: string[] },
+    ctx: { jobId: string; opmModel?: unknown; spec?: unknown },
+) {
+    // 1. Set up progress logging for this job.
+    const log = makeStageLogger(ctx.jobId);
+
+    // 2. Run the two-agent loop. It returns the finished files (build.artifact),
+    //    how it ended (build.outcome), and how many passes it took.
+    const opmModel = ctx.opmModel as AgentIR;
+    const build = await runBuildLoop(superPrompt.prompt, opmModel, { maxIters: 3, log });
+
+    // 3. Make a fresh output folder on disk for this job.
+    const outDir = await prepareOutDir(ctx.jobId);
+
+    // 4. Write the files to disk and return a summary for the dashboard.
+    const notes = `agentic loop: ${build.outcome} after ${build.iterations} pass(es)`;
+    const sources = { opmModel: ctx.opmModel, spec: ctx.spec };
+    return finalizeOutput(outDir, build.artifact, sources, notes, "claude");
 }

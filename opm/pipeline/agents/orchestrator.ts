@@ -50,7 +50,9 @@ export type BuildResult = {
     ledger:     LedgerEntry[];
 };
 
-// Drive the generate->test->reflect->regenerate cycle until a stopping condition.
+// The two-agent build loop. Drives the generate->test->reflect->regenerate
+// cycle until a stopping condition. Wrapped by generateCode_stage4 (the Stage 4
+// entry point in pipeline/stages/stage4-codegen.ts), which writes to disk.
 export async function runBuildLoop(
     superPrompt: string,
     ir: AgentIR,
@@ -62,11 +64,18 @@ export async function runBuildLoop(
     const ledger:  LedgerEntry[]   = [];
     const history: ReflectionNote[] = [];
 
+    const emptyCoverage = {
+        total_elements: 0, covered: 0, coverage_pct: 0, missing: [],
+        objects:   { total: 0, covered: 0, missing: [] },
+        processes: { total: 0, covered: 0, missing: [] },
+        links:     { total: 0, covered: 0, missing: [] },
+    };
+
     let iter = 0;
     let lastSignature = "";
     let reflection: ReflectionNote = { diagnosis: "", fixPlan: "" };
     let artifact: CodeArtifact = [];
-    let report: TestReport = { passed: false, failures: [], signature: "" };
+    let report: TestReport = { passed: false, failures: [], signature: "", coverage: emptyCoverage, acceptanceTests: [], codeReview: [] };
 
     while (true) {
         // ACT — generate (first pass) or regenerate (guided by the last reflection).
@@ -79,7 +88,7 @@ export async function runBuildLoop(
         }
 
         // OBSERVE — the Testing Agent judges the artifact.
-        report = runTests(artifact, ir);
+        report = await runTests(artifact, ir);
         log(`🔎 Testing Agent: ${report.passed ? "all checks passed" : `${report.failures.length} failure(s)`}.`);
 
         ledger.push({
