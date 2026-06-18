@@ -14,9 +14,12 @@
 //                        catches a dropped "*" (e.g. ")100" instead of ")*100").
 //   Tier 2b python     : best-effort `py_compile` of generated .py files; skipped
 //                        silently if python is not available.
+//   Tier 3  build&boot : actually `npm run build` + `pip install` + `import main`;
+//                        catches missing deps / broken imports. Off unless
+//                        OPM_RUN_BUILD_CHECKS=1 (it's slow and runs the code).
 //   Tier 4  acceptance : LLM-judged behaviour tests; skipped if Gemini is absent.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
@@ -145,6 +148,104 @@ export function signatureOf(failures: Failure[]): string {
     return failures.map((f) => `${f.kind}:${f.id}`).sort().join("|");
 }
 
+// ── Tier 3: build & boot (real, expensive — env-gated) ───────────────────────
+// Writes the artifact to disk and actually builds it. Catches what the cheap
+// tiers can't: missing deps, broken imports, build failures.
+
+const BUILD_ROOT = path.join(os.tmpdir(), "opm-build-check");
+
+type CmdResult = { ok: boolean; out: string };
+
+// Run a command, time-bounded; stdout+stderr merged. shell:true only for npm
+// (resolves npm.cmd on Windows); shell:false for direct executables (python).
+function runCmd(
+    cmd: string,
+    args: string[],
+    opts: { cwd: string; timeoutMs: number; env?: Record<string, string>; shell?: boolean },
+): CmdResult {
+    const r = spawnSync(cmd, args, {
+        cwd:      opts.cwd,
+        timeout:  opts.timeoutMs,
+        encoding: "utf-8",
+        shell:    opts.shell ?? false,
+        env:      { ...process.env, ...(opts.env ?? {}) },
+    });
+    const out = `${r.stdout ?? ""}\n${r.stderr ?? ""}`.trim();
+    return { ok: !r.error && r.status === 0, out };
+}
+
+// Last N chars of output — the actual error, for the reflection step.
+function tail(s: string, n = 600): string {
+    return s.length > n ? "…" + s.slice(-n) : s;
+}
+
+// Write the artifact to a REUSED temp dir, so node_modules/.venv from a previous
+// iteration survive and installs stay incremental.
+function writeArtifactToTemp(files: FileSpec[]): string {
+    for (const f of files) {
+        const rel = f.path.replace(/^[\\/]+/, "");
+        if (rel.includes("..")) continue;
+        const full = path.join(BUILD_ROOT, rel);
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, f.content);
+    }
+    return BUILD_ROOT;
+}
+
+// Frontend: npm install + npm run build. Catches missing deps (e.g. tailwindcss).
+function checkFrontend(root: string): Failure[] {
+    const dir = path.join(root, "frontend");
+    if (!fs.existsSync(path.join(dir, "package.json"))) return [];
+
+    const install = runCmd("npm", ["install", "--no-audit", "--no-fund"], { cwd: dir, timeoutMs: 240_000, shell: true });
+    if (!install.ok) {
+        return [{ kind: "build_error", id: "frontend: npm install", detail: `frontend "npm install" failed:\n${tail(install.out)}` }];
+    }
+    const build = runCmd("npm", ["run", "build"], { cwd: dir, timeoutMs: 240_000, shell: true });
+    if (!build.ok) {
+        return [{ kind: "build_error", id: "frontend: npm run build", detail: `frontend "npm run build" failed:\n${tail(build.out)}` }];
+    }
+    return [];
+}
+
+// Backend: venv + pip install + `import main`. Catches broken imports / missing
+// models. Uses a SQLite DATABASE_URL so the import needs no real database.
+function checkBackend(root: string): Failure[] {
+    const dir = path.join(root, "backend");
+    if (!fs.existsSync(path.join(dir, "main.py"))) return [];
+
+    const python = findPython();
+    if (!python) return []; // no python — skip this half
+
+    const venvPy = process.platform === "win32"
+        ? path.join(dir, ".venv", "Scripts", "python.exe")
+        : path.join(dir, ".venv", "bin", "python");
+
+    if (!fs.existsSync(venvPy)) {
+        const venv = runCmd(python, ["-m", "venv", ".venv"], { cwd: dir, timeoutMs: 120_000 });
+        if (!venv.ok) {
+            return [{ kind: "build_error", id: "backend: venv", detail: `backend venv creation failed:\n${tail(venv.out)}` }];
+        }
+    }
+    if (fs.existsSync(path.join(dir, "requirements.txt"))) {
+        const pip = runCmd(venvPy, ["-m", "pip", "install", "-q", "-r", "requirements.txt"], { cwd: dir, timeoutMs: 300_000 });
+        if (!pip.ok) {
+            return [{ kind: "build_error", id: "backend: pip install", detail: `backend "pip install -r requirements.txt" failed:\n${tail(pip.out)}` }];
+        }
+    }
+    const imp = runCmd(venvPy, ["-c", "import main"], { cwd: dir, timeoutMs: 60_000, env: { DATABASE_URL: "sqlite:///./_check.db" } });
+    if (!imp.ok) {
+        return [{ kind: "build_error", id: "backend: import main", detail: `backend "import main" failed:\n${tail(imp.out)}` }];
+    }
+    return [];
+}
+
+// Tier 3 entry: build both halves on disk, collect failures.
+function buildFailures(files: FileSpec[]): Failure[] {
+    const root = writeArtifactToTemp(files);
+    return [...checkFrontend(root), ...checkBackend(root)];
+}
+
 // The Testing Agent's single public action: judge a code artifact.
 export async function runTests(files: FileSpec[], ir: AgentIR): Promise<TestReport> {
     // Collect failures from each detector tier into one list.
@@ -164,6 +265,12 @@ export async function runTests(files: FileSpec[], ir: AgentIR): Promise<TestRepo
 
     // Tier 2b: the generated python compiles (if python is available).
     for (const f of pythonSyntaxFailures(files)) failures.push(f);
+
+    // Tier 3: build & boot — expensive, env-gated, and only run when the cheap
+    // tiers are already clean (no point building structurally-broken code).
+    if (process.env.OPM_RUN_BUILD_CHECKS === "1" && failures.length === 0) {
+        for (const f of buildFailures(files)) failures.push(f);
+    }
 
     // Tier 4: LLM acceptance tests — a failing test is a real failure.
     const review = await runAcceptanceReview(files);

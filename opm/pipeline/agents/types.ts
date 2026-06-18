@@ -13,7 +13,7 @@ export type CodeArtifact = FileSpec[];
 // A single concrete defect found by the Testing Agent. `detail` is written to
 // be actionable, because it is fed verbatim into the reflection step.
 export type Failure = {
-    kind:   "missing_file" | "empty_file" | "uncovered_id" | "invalid_formula" | "python_syntax" | "acceptance_test";
+    kind:   "missing_file" | "empty_file" | "uncovered_id" | "invalid_formula" | "python_syntax" | "acceptance_test" | "build_error";
     id:     string;   // the thing that failed: a filename, an OPM id (O*/P*), or a test objective
     detail: string;   // human-readable, actionable description
 };

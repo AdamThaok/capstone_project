@@ -14,7 +14,6 @@ import {
     generateComplete,
     parseDelimitedFiles,
     OPM_SYSTEM_PROMPT,
-    CODEGEN_INSTRUCTIONS,
 } from "@/opm/pipeline/stages/stage4-codegen";
 import {
     askText as claudeAskText,
@@ -25,22 +24,58 @@ import type { CodeArtifact, FileSpec, TestReport, ReflectionNote, AgentIR } from
 
 type Progress = (msg: string) => void;
 
-// One generation layer = a coherent group of files in dependency order.
-type Layer = { name: string; instruction: string };
+// One generation layer = a small, explicit set of files in dependency order.
+type Layer = { name: string; files: string[]; instruction: string };
 
 // What every layer call needs to stay consistent with the layers before it.
 type LayerContext = { superPrompt: string; written: FileSpec[] };
 
-// Dependency order: each layer is handed the interfaces of the ones before it,
-// so the data shapes are defined ONCE and never re-invented (no dual ORM, no
-// front/back drift). The route signatures the API layer emits become the
-// contract the Frontend layer must match.
+// Just the output format — NOT the "generate all 12 mandatory files" mandate,
+// which would make every layer regenerate the whole app.
+const DELIMITER_FORMAT = `
+OUTPUT FORMAT — use EXACTLY this, no JSON, no markdown fences:
+===FILE: path/to/file===
+<full file content>
+===END===
+`.trim();
+
+// Dependency order: each layer writes only ITS files, and is handed the
+// interfaces of the ones before it — so the data shapes are defined ONCE and
+// never re-invented (no dual ORM, no front/back drift). `files` is the exact,
+// short list each layer may emit; the Frontend layer also adds one page per
+// entity (it can't be fully enumerated up front).
 const LAYERS: Layer[] = [
-    { name: "Data",          instruction: "Write the database models + request/response schemas — ONE consistent set, no duplicates." },
-    { name: "API",           instruction: "Write the routers/endpoints, using ONLY the models + schemas already written above." },
-    { name: "Backend entry", instruction: "Write the app entry (wire all routers, CORS, create tables on startup), the DB setup, and requirements/deps." },
-    { name: "Frontend",      instruction: "Write the API client + pages that call EXACTLY the routes already defined above (match every path + field name)." },
-    { name: "Config",        instruction: "Write package.json (DECLARE every dependency you import, e.g. tailwindcss), build config, index.html, README, and .env.example." },
+    {
+        name: "Data",
+        files: ["backend/models.py", "backend/schemas.py"],
+        instruction: "SQLAlchemy models + Pydantic schemas — ONE consistent set, no duplicates.",
+    },
+    {
+        name: "API",
+        files: ["backend/routers.py"],
+        instruction: "All FastAPI endpoints in one router module, using ONLY the models + schemas already written.",
+    },
+    {
+        name: "Backend entry",
+        files: ["backend/main.py", "backend/database.py", "backend/requirements.txt", "backend/Dockerfile"],
+        instruction: "Wire the router(s), CORS, and create tables on startup. requirements.txt must list every imported package.",
+    },
+    {
+        name: "Frontend",
+        files: ["frontend/src/main.tsx", "frontend/src/App.tsx", "frontend/src/api.ts", "frontend/index.html"],
+        instruction: "Plus ONE page component per main entity under frontend/src/pages/. Call EXACTLY the routes already defined above — match every path + field name.",
+    },
+    {
+        name: "Config",
+        files: [
+            "frontend/package.json", "frontend/vite.config.ts", "frontend/tsconfig.json",
+            "frontend/postcss.config.js", "frontend/tailwind.config.js",
+            "docker-compose.yml", "README.md", "TRACEABILITY.md",
+        ],
+        instruction:
+            "package.json MUST declare every dependency the frontend imports (react, axios, AND tailwindcss/postcss/autoprefixer if used). " +
+            "TRACEABILITY.md MUST list EVERY OPM id from the brief — every object id (O1..On) and every process id (P1..Pn) — each on a line mapping it to the file that implements it (e.g. `- O4 Child -> backend/models.py`).",
+    },
 ];
 
 // Action 1: first-pass generation — built LAYER BY LAYER (not one giant stream),
@@ -79,24 +114,30 @@ export async function generateInitialCode(
 async function generateLayer(layer: Layer, ctx: LayerContext, log: Progress): Promise<FileSpec[]> {
     const text = await generateComplete(
         (p) => claudeAskText(p, CODEGEN_MODEL),
-        `${OPM_SYSTEM_PROMPT}\n\n${buildLayerPrompt(layer, ctx)}\n\n${CODEGEN_INSTRUCTIONS}`,
+        `${OPM_SYSTEM_PROMPT}\n\n${buildLayerPrompt(layer, ctx)}\n\n${DELIMITER_FORMAT}`,
         log,
     );
     return parseDelimitedFiles(text);
 }
 
-// Assemble a single layer's prompt: layer goal + the brief + what already exists.
+// Assemble a single layer's prompt: the EXACT files for this layer + the brief
+// + the interfaces already written. The explicit file list is what stops the
+// model from regenerating the whole app each layer.
 function buildLayerPrompt(layer: Layer, ctx: LayerContext): string {
     const already = ctx.written.length
         ? `## Files already written (match these EXACTLY — do not redefine them)\n${summarizeInterfaces(ctx.written)}`
         : "## Files already written\n(none — this is the first layer)";
 
+    // Order matters: the brief is CONTEXT (first), and the hard file constraint
+    // is LAST so it's the final, highest-recency instruction the model reads.
     return [
-        `You are generating ONE layer of the app: ${layer.name}.`,
-        layer.instruction,
-        "Output ONLY the files for THIS layer, in the delimiter format. Do NOT regenerate earlier files.",
+        `## Build brief (CONTEXT ONLY — describes the whole app)\n${ctx.superPrompt}`,
         already,
-        `## Build brief\n${ctx.superPrompt}`,
+        `You are writing ONE layer of this app: ${layer.name}. ${layer.instruction}`,
+        `OUTPUT ONLY THESE FILES — nothing else. Do NOT regenerate earlier files. ` +
+        `IGNORE any other files the brief mentions (README, docker-compose, other entities, etc.) — ` +
+        `OTHER LAYERS handle those. Emit exactly:\n${layer.files.map((f) => `- ${f}`).join("\n")}` +
+        `\n(plus, for the Frontend layer only, one page component per entity under frontend/src/pages/).`,
     ].join("\n\n");
 }
 
