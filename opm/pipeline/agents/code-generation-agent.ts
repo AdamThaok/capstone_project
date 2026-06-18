@@ -14,6 +14,7 @@ import {
     generateComplete,
     parseDelimitedFiles,
     OPM_SYSTEM_PROMPT,
+    CODEGEN_INSTRUCTIONS,
 } from "@/opm/pipeline/stages/stage4-codegen";
 import {
     askText as claudeAskText,
@@ -24,12 +25,79 @@ import type { CodeArtifact, FileSpec, TestReport, ReflectionNote, AgentIR } from
 
 type Progress = (msg: string) => void;
 
-// Action 1: first-pass generation from the super prompt (today's Stage 4).
+// One generation layer = a coherent group of files in dependency order.
+type Layer = { name: string; instruction: string };
+
+// What every layer call needs to stay consistent with the layers before it.
+type LayerContext = { superPrompt: string; written: FileSpec[] };
+
+// Dependency order: each layer is handed the interfaces of the ones before it,
+// so the data shapes are defined ONCE and never re-invented (no dual ORM, no
+// front/back drift). The route signatures the API layer emits become the
+// contract the Frontend layer must match.
+const LAYERS: Layer[] = [
+    { name: "Data",          instruction: "Write the database models + request/response schemas — ONE consistent set, no duplicates." },
+    { name: "API",           instruction: "Write the routers/endpoints, using ONLY the models + schemas already written above." },
+    { name: "Backend entry", instruction: "Write the app entry (wire all routers, CORS, create tables on startup), the DB setup, and requirements/deps." },
+    { name: "Frontend",      instruction: "Write the API client + pages that call EXACTLY the routes already defined above (match every path + field name)." },
+    { name: "Config",        instruction: "Write package.json (DECLARE every dependency you import, e.g. tailwindcss), build config, index.html, README, and .env.example." },
+];
+
+// Action 1: first-pass generation — built LAYER BY LAYER (not one giant stream),
+// so each file is generated knowing the interfaces of the files already written.
 export async function generateInitialCode(
     superPrompt: string,
     onProgress?: Progress,
 ): Promise<CodeArtifact> {
-    return callClaude(superPrompt, onProgress);
+    const log = onProgress ?? (() => { /* no-op */ });
+    const written: FileSpec[] = [];
+
+    for (const layer of LAYERS) {
+        log(`🧱 Generating layer: ${layer.name}…`);
+        let files: FileSpec[] = [];
+        try {
+            files = await generateLayer(layer, { superPrompt, written }, log);
+        } catch (e) {
+            log(`⚠️ Layer "${layer.name}" failed (${(e as Error).message}) — continuing.`);
+        }
+        for (const f of files) {
+            const i = written.findIndex((w) => w.path === f.path);
+            if (i >= 0) written[i] = f; else written.push(f);
+        }
+        log(`✅ ${layer.name}: ${files.length} file(s) (total ${written.length}).`);
+    }
+
+    // Safety net: if the layered pass produced too little, fall back to one-shot.
+    if (written.length < 3) {
+        log("↩️ Layered output too small — falling back to single-pass generation.");
+        return callClaude(superPrompt, onProgress);
+    }
+    return written;
+}
+
+// Generate ONE layer: assemble its prompt, call Claude, parse the files.
+async function generateLayer(layer: Layer, ctx: LayerContext, log: Progress): Promise<FileSpec[]> {
+    const text = await generateComplete(
+        (p) => claudeAskText(p, CODEGEN_MODEL),
+        `${OPM_SYSTEM_PROMPT}\n\n${buildLayerPrompt(layer, ctx)}\n\n${CODEGEN_INSTRUCTIONS}`,
+        log,
+    );
+    return parseDelimitedFiles(text);
+}
+
+// Assemble a single layer's prompt: layer goal + the brief + what already exists.
+function buildLayerPrompt(layer: Layer, ctx: LayerContext): string {
+    const already = ctx.written.length
+        ? `## Files already written (match these EXACTLY — do not redefine them)\n${summarizeInterfaces(ctx.written)}`
+        : "## Files already written\n(none — this is the first layer)";
+
+    return [
+        `You are generating ONE layer of the app: ${layer.name}.`,
+        layer.instruction,
+        "Output ONLY the files for THIS layer, in the delimiter format. Do NOT regenerate earlier files.",
+        already,
+        `## Build brief\n${ctx.superPrompt}`,
+    ].join("\n\n");
 }
 
 // Action 2: diagnose WHY the tests failed, before touching code. Past fix plans
@@ -112,6 +180,30 @@ ${prevFiles.map((f) => `===FILE: ${f.path}===\n${f.content}\n===END===`).join("\
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+// Lines that declare an interface another layer must match: classes, functions,
+// route decorators, exported TS types. We keep these (the "signatures") and drop
+// the bodies, so the next layer sees what exists without resending the codebase.
+const SIGNATURE_RE =
+    /^\s*(class |def |async def |@app\.|@router\.|app\.(get|post|put|delete|patch)|router\.(get|post|put|delete|patch)|export |interface |type \w+\s*=|function )/;
+
+function signatureLines(file: FileSpec): string {
+    const keep: string[] = [];
+    for (const line of file.content.split("\n")) {
+        if (SIGNATURE_RE.test(line)) keep.push(line.trim());
+    }
+    return keep.slice(0, 40).join("\n");
+}
+
+// Compact digest of already-written files: path + signature lines only (no bodies).
+export function summarizeInterfaces(written: FileSpec[]): string {
+    const blocks: string[] = [];
+    for (const f of written) {
+        const sig = signatureLines(f);
+        blocks.push(`=== ${f.path} ===\n${sig || "(no notable signatures)"}`);
+    }
+    return blocks.join("\n\n");
+}
 
 function mergeFiles(base: CodeArtifact, patches: FileSpec[]): CodeArtifact {
     const byPath = new Map(base.map((f) => [f.path, f]));
