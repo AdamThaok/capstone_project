@@ -60,6 +60,7 @@ handful of API calls. Fine for testing — just not instant.
 
 ```bash
 cd web
+npm run check:keys   # ping Anthropic + Gemini to confirm your keys work
 npx tsc --noEmit     # type-check
 npx vitest run       # unit tests (testing agent, stopping conditions, QA blocking)
 npx next build       # production build
