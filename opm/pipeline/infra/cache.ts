@@ -27,16 +27,38 @@ function ensureDir() {
     try { fs.mkdirSync(CACHE_DIR, { recursive: true }); } catch { /* exists */ }
 }
 
-// Key = hash of (cache version + format + every uploaded file's bytes).
-export function computeCacheKey(filePaths: string[], format: string): string {
+// Core hash: (cache version + format + every file's bytes). Shared by both the
+// path-based key (runner, which has files on disk) and the bytes-based key (the
+// /api/cache/check route, which has the freshly-uploaded buffers in memory) so
+// the two can never drift apart and disagree about whether something is cached.
+export function computeCacheKeyFromBytes(buffers: Buffer[], format: string): string {
     const h = crypto.createHash("sha256");
     h.update(CACHE_VERSION);
     h.update(format);
-    for (const p of filePaths) {
-        try { h.update(fs.readFileSync(p)); }
-        catch { h.update(p); }
+    for (const b of buffers) {
+        h.update(b);
     }
     return h.digest("hex").slice(0, 32);
+}
+
+// Key = hash of (cache version + format + every uploaded file's bytes).
+export function computeCacheKey(filePaths: string[], format: string): string {
+    const buffers: Buffer[] = [];
+    for (const p of filePaths) {
+        try { buffers.push(fs.readFileSync(p)); }
+        catch { buffers.push(Buffer.from(p)); }
+    }
+    return computeCacheKeyFromBytes(buffers, format);
+}
+
+// Is there a cached prep result for this key? (Cheap existence check — used by the
+// upload card to show "cached / not cached" before the user clicks Generate.)
+export function hasPrepCache(key: string): boolean {
+    try {
+        return fs.existsSync(path.join(CACHE_DIR, `${key}.json`));
+    } catch {
+        return false;
+    }
 }
 
 export function readPrepCache(key: string): PrepCache | null {

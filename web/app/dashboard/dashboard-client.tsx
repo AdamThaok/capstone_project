@@ -107,6 +107,31 @@ export default function DashboardClient({ initialJobId }: { initialJobId?: strin
     const [job, setJob] = useState<JobState | null>(null);
     const [expanded, setExpanded] = useState<StageId | null>(null);
 
+    // Cache badge: is the prep (stages 1-3) for the SELECTED files already cached?
+    // We ask the server (which owns the real key algorithm) so the badge can never
+    // disagree with what the pipeline will actually do.
+    const [cacheState, setCacheState] = useState<"idle" | "checking" | "cached" | "miss">("idle");
+
+    async function refreshCacheBadge(current: File[]): Promise<void> {
+        if (current.length === 0) { setCacheState("idle"); return; }
+        setCacheState("checking");
+        try {
+            const body = new FormData();
+            for (const f of current) body.append("files", f);
+            const res = await fetch("/api/cache/check", { method: "POST", body });
+            const data = await res.json().catch(() => ({ cached: false }));
+            setCacheState(data?.cached ? "cached" : "miss");
+        } catch {
+            setCacheState("idle");
+        }
+    }
+
+    // Re-check whenever the selected file set (by name+size) changes.
+    useEffect(() => {
+        refreshCacheBadge(files);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [files.map((f) => `${f.name}|${f.size}`).join(",")]);
+
     // Load an existing job when opened from the projects page (?job=id).
     useEffect(() => {
         if (!initialJobId) return;
@@ -209,6 +234,8 @@ export default function DashboardClient({ initialJobId }: { initialJobId?: strin
             const res = await fetch("/api/cache/clear", { method: "POST" });
             const data = await res.json().catch(() => ({}));
             alert(res.ok ? `Cache cleared (${data.cleared ?? 0} entr${(data.cleared ?? 0) === 1 ? "y" : "ies"}). Next run re-does stages 1-3.` : "Failed to clear cache.");
+            // Clearing makes the current selection a miss — update the badge.
+            if (res.ok) await refreshCacheBadge(files);
         } catch {
             alert("Failed to clear cache.");
         } finally {
@@ -351,6 +378,19 @@ export default function DashboardClient({ initialJobId }: { initialJobId?: strin
                                     {files.length} file{files.length === 1 ? "" : "s"} selected
                                     {files.length >= MAX_FILES ? " (limit reached)" : ""}
                                 </div>
+                                {cacheState !== "idle" && (
+                                    <div
+                                        className="hint"
+                                        style={{
+                                            marginTop: "0.1rem",
+                                            color: cacheState === "cached" ? "var(--green)" : "var(--text-2)",
+                                        }}
+                                    >
+                                        {cacheState === "checking" && "Checking cache…"}
+                                        {cacheState === "cached" && "♻️ Cached — stages 1-3 (parse · spec · super-prompt) will be skipped."}
+                                        {cacheState === "miss" && "⚡ Not cached — this run executes stages 1-3 in full."}
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -593,7 +633,7 @@ export default function DashboardClient({ initialJobId }: { initialJobId?: strin
                             </>
                         )}
 
-                        {job?.done && job.stages.every((s) => s.status === "done") && (
+                        {job?.done && job.stages.find((s) => s.stage === "generate")?.status === "done" && (
                             <>
                                 <div style={{ height: "1.5rem" }} />
                                 <h3>Traceability Report</h3>
@@ -615,6 +655,12 @@ export default function DashboardClient({ initialJobId }: { initialJobId?: strin
                                 <button className="primary" onClick={downloadProject}>
                                     Download Project (ZIP)
                                 </button>
+                                {job.qaReport?.blocked && (
+                                    <p className="hint" style={{ marginTop: ".5rem" }}>
+                                        QA flagged issues and deploy is blocked, but the generated
+                                        project is complete and downloadable.
+                                    </p>
+                                )}
                             </>
                         )}
                     </div>

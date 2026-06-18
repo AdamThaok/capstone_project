@@ -110,14 +110,46 @@ export async function generateInitialCode(
     return written;
 }
 
-// Generate ONE layer: assemble its prompt, call Claude, parse the files.
+// Is this file one the layer is actually allowed to emit? The prompt ASKS the
+// model to stay in its lane, but the model often ignores that and dumps the whole
+// app (e.g. 37 files when the API layer should emit one router). Those extras are
+// what drive chunk-to-chunk drift, so we enforce the lane deterministically instead
+// of trusting the instruction.
+function isAllowedInLayer(layer: Layer, filePath: string): boolean {
+    if (layer.files.includes(filePath)) {
+        return true;
+    }
+    // The Frontend layer also owns one page component per entity. Those can't be
+    // listed up front, so allow anything under its pages/ directory.
+    if (layer.name === "Frontend" && filePath.startsWith("frontend/src/pages/")) {
+        return true;
+    }
+    return false;
+}
+
+// Generate ONE layer: assemble its prompt, call Claude, parse the files, then drop
+// anything the model emitted outside this layer's lane.
 async function generateLayer(layer: Layer, ctx: LayerContext, log: Progress): Promise<FileSpec[]> {
     const text = await generateComplete(
         (p) => claudeAskText(p, CODEGEN_MODEL),
         `${OPM_SYSTEM_PROMPT}\n\n${buildLayerPrompt(layer, ctx)}\n\n${DELIMITER_FORMAT}`,
         log,
     );
-    return parseDelimitedFiles(text);
+    const parsed = parseDelimitedFiles(text);
+
+    const kept: FileSpec[] = [];
+    let dropped = 0;
+    for (const f of parsed) {
+        if (isAllowedInLayer(layer, f.path)) {
+            kept.push(f);
+        } else {
+            dropped++;
+        }
+    }
+    if (dropped > 0) {
+        log(`✂️ ${layer.name}: dropped ${dropped} out-of-lane file(s) the model emitted (kept ${kept.length}).`);
+    }
+    return kept;
 }
 
 // Assemble a single layer's prompt: the EXACT files for this layer + the brief
@@ -178,16 +210,115 @@ Respond with STRICT JSON only: { "diagnosis": "...", "fixPlan": "..." }
     }
 }
 
-// Action 3: emit corrected files guided by the reflection, then merge them over
-// the previous artifact (patched files win; untouched files are kept).
-export async function regenerateFromReflection(
+// Which already-written files does this failure set point at? We count a file as
+// implicated whenever its path shows up in a failure's id or detail text. This
+// lets us re-emit ONLY those files instead of the whole repo.
+//
+// Note: uncovered_id failures name an OPM id (O*/P*), not a path, so they match
+// nothing here on purpose — a missing id has no single home file, so those fall
+// back to the unscoped prompt below.
+// Files where OPM ids are supposed to be implemented. A coverage gap ("id O3 is
+// not referenced in any file") has no single home, so we route it to this bounded
+// set instead of falling back to the whole repo.
+const ID_HOME_FILES = ["backend/models.py", "backend/routers.py", "TRACEABILITY.md"];
+
+// Does this failure point at this file? Three ways: the failure text contains the
+// full path, contains just the basename (build errors often print "App.tsx", not
+// the full path), or it's a coverage gap and this is an id-home file.
+function failurePointsAtFile(fail: { kind: string; id: string; detail: string }, file: FileSpec): boolean {
+    const base = file.path.split("/").pop() ?? file.path;
+    if (fail.id.includes(file.path) || fail.detail.includes(file.path)) {
+        return true;
+    }
+    if (base.length > 3 && fail.detail.includes(base)) {
+        return true;
+    }
+    if (fail.kind === "uncovered_id" && ID_HOME_FILES.includes(file.path)) {
+        return true;
+    }
+    return false;
+}
+
+function filesImplicatedBy(prevFiles: CodeArtifact, report: TestReport): FileSpec[] {
+    const hits: FileSpec[] = [];
+    for (const f of prevFiles) {
+        let mentioned = false;
+        for (const fail of report.failures) {
+            if (failurePointsAtFile(fail, f)) {
+                mentioned = true;
+            }
+        }
+        if (mentioned) {
+            hits.push(f);
+        }
+    }
+    return hits;
+}
+
+// Scoped fix prompt: re-emit ONLY the implicated files (full bodies), and show
+// the rest of the repo as signatures only. The model keeps interfaces intact
+// without reprinting — and re-cutting-off on — the whole codebase. This is what
+// stops a one-line fix from triggering several continuations.
+function buildScopedFixPrompt(
+    prevFiles: CodeArtifact,
+    targets: FileSpec[],
+    note: ReflectionNote,
+    report: TestReport,
+    ir: AgentIR,
+): string {
+    const targetPaths = targets.map((f) => f.path);
+    const others: FileSpec[] = [];
+    for (const f of prevFiles) {
+        if (!targetPaths.includes(f.path)) {
+            others.push(f);
+        }
+    }
+
+    const targetBlocks = targets
+        .map((f) => `===FILE: ${f.path}===\n${f.content}\n===END===`)
+        .join("\n\n");
+    const targetList = targetPaths.map((p) => `- ${p}`).join("\n");
+
+    return `
+You previously generated a project. The Testing Agent found these failures:
+${report.failures.map((f) => `- ${f.detail}`).join("\n")}
+
+Diagnosis: ${note.diagnosis}
+Fix plan:  ${note.fixPlan}
+
+Re-emit ONLY these ${targets.length} file(s) — and NOTHING else — each as a
+COMPLETE file, using the delimiter format:
+${targetList}
+
+===FILE: path/to/file===
+<corrected content>
+===END===
+
+Rules:
+- Re-emit ONLY the files listed above. Do NOT output any other file.
+- Use the OPM IR "computation" fields VERBATIM for any formula; preserve every "*".
+- Do not introduce new features or remove files; only fix what failed.
+
+## OPM IR
+${JSON.stringify(ir, null, 2)}
+
+## Files you must fix (re-emit these, complete)
+${targetBlocks}
+
+## Rest of the repo (signatures only — DO NOT re-emit, just stay compatible)
+${summarizeInterfaces(others)}
+`.trim();
+}
+
+// Unscoped fallback: no failure named a specific file (e.g. a coverage gap), so
+// hand over the whole repo and let the model decide what to change.
+function buildFullFixPrompt(
     prevFiles: CodeArtifact,
     note: ReflectionNote,
     report: TestReport,
     ir: AgentIR,
-    onProgress?: Progress,
-): Promise<CodeArtifact> {
-    const prompt = `
+): string {
+    return `
 You previously generated a project. The Testing Agent found these failures:
 ${report.failures.map((f) => `- ${f.detail}`).join("\n")}
 
@@ -210,6 +341,31 @@ ${JSON.stringify(ir, null, 2)}
 ## Current files
 ${prevFiles.map((f) => `===FILE: ${f.path}===\n${f.content}\n===END===`).join("\n\n")}
 `.trim();
+}
+
+// Action 3: emit corrected files guided by the reflection, then merge them over
+// the previous artifact (patched files win; untouched files are kept).
+//
+// We scope the prompt to just the files the failures point at, so a small fix
+// re-emits a few files instead of the whole repo (fewer continuations, less drift).
+export async function regenerateFromReflection(
+    prevFiles: CodeArtifact,
+    note: ReflectionNote,
+    report: TestReport,
+    ir: AgentIR,
+    onProgress?: Progress,
+): Promise<CodeArtifact> {
+    const log = onProgress ?? (() => { /* no-op */ });
+
+    const targets = filesImplicatedBy(prevFiles, report);
+    let prompt = "";
+    if (targets.length > 0) {
+        log(`🎯 Scoped fix: re-emitting ${targets.length} implicated file(s).`);
+        prompt = buildScopedFixPrompt(prevFiles, targets, note, report, ir);
+    } else {
+        log("🌐 Unscoped fix: no single file implicated — sending the full repo.");
+        prompt = buildFullFixPrompt(prevFiles, note, report, ir);
+    }
 
     const text = await generateComplete(
         (p) => claudeAskText(p, CODEGEN_MODEL),
