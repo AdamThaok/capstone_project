@@ -47,11 +47,26 @@ Emit JSON exactly in this shape:
   ]
 }
 
-Rules:
-- Every entity must trace back to an OPM object via "source": "O<id>".
-- Every endpoint must trace back to an OPM process via "source": "P<id>" (or "derived" for CRUD reads).
+COVERAGE IS MANDATORY — this is a fidelity tool, you may NOT summarize, sample, or omit:
+- EVERY process (P1..Pn) in the IR MUST become an endpoint. N processes -> N endpoints.
+- EVERY object (O1..On) MUST appear, either as an entity OR as a typed field of an entity.
+- SELF-CHECK before answering: confirm every O-id and every P-id from the input appears
+  in some "source". If any is missing, add it. Do not return until coverage is complete.
+
+Entity vs. field (avoid a table per number):
+- A scalar/parameter object (a single number, weight, length, percentile, severity,
+  caloric value, etc.) becomes a typed FIELD of the entity that aggregates or exhibits
+  it — NOT its own table.
+- Create a standalone entity only for an object that aggregates other objects (a "whole")
+  or that has its own states / lifecycle.
+- Every aggregation link (whole -> part) becomes a foreign key (or nested field) from part
+  to whole.
+
+Tracing & rules:
+- Every entity: "source": "O<id>". Every endpoint: "source": "P<id>" (or "derived" for CRUD reads).
 - Every state-change link becomes either an enum with transitions, or a dedicated endpoint.
-- Every aggregation link becomes a foreign key from part → whole.
+- For a process with a "computation" field, create a compute endpoint; the code stage
+  implements the formula verbatim from the IR, so just reference it here.
 - No features beyond what the OPM model contains.
 `.trim();
 

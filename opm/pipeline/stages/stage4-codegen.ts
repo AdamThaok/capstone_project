@@ -101,6 +101,11 @@ Hard constraints (non-negotiable):
 - If a process carries a computational function/formula (its "computation"
   field), implement that logic EXACTLY in the endpoint — port the given
   code/formula faithfully; do not approximate, simplify, or stub it.
+- The OPM IR's "computation" field is the SOURCE OF TRUTH for every formula —
+  use it verbatim, not any reworded copy that may appear in the super prompt.
+  Preserve every arithmetic operator exactly; never drop a "*" (")*100" not
+  ")100", "a*b" not "ab"). Port JS expressions faithfully into the target
+  language so they remain mathematically identical and runnable.
 - Enforce state transitions exactly as modelled: a transition changes an object's
   state only from the modelled source state; reject any other source state with
   HTTP 409 Conflict.

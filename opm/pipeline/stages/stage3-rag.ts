@@ -100,8 +100,15 @@ ZERO-CONFIG CLOUD DEPLOY REQUIREMENTS (HARD):
 
 The super prompt MUST:
 - Begin with the reconstructed OPL paragraph.
-- Enumerate every entity, endpoint, screen, business rule.
-- Embed the retrieved KB chunks INLINE (keep their [ID] + ISO/Dori citations).
+- COVERAGE IS MANDATORY — enumerate EVERY entity and EVERY endpoint from the spec.
+  If the spec lists N endpoints, the super prompt lists all N — including non-compute
+  "action" endpoints (create/define/change/examine/etc.), not only the ones that
+  carry a formula. Do not summarize, sample, or omit any process or object.
+- For every process that has a "computation", copy that formula VERBATIM from the IR
+  into the endpoint. Preserve EVERY arithmetic operator exactly — never drop a "*"
+  (write ")*100" not ")100", "a*b" not "ab"). The formula must be valid, runnable code.
+- Embed ALL of the retrieved KB chunks INLINE, each keeping its [ID] + ISO/Dori
+  citation. Do not reduce them to a few examples.
 - State hard constraints: no extra features; validate state transitions exactly
   as modelled (reject illegal source states with 409); no invented fields;
   consumees destroyed, resultees created, instruments untouched; include
@@ -110,6 +117,9 @@ The super prompt MUST:
 - Frontend MUST include index.html (Vite entry) and a package.json whose scripts
   are exactly { "dev": "vite", "build": "vite build", "preview": "vite preview" }.
 - Instruct the generator to emit files in the delimiter format used by Stage 4.
+
+SELF-CHECK before responding: confirm the super prompt references every endpoint id
+and every entity id present in the spec, and that no "*" was dropped from any formula.
 
 Respond with ONLY the super prompt text (no markdown fences, no preamble).
 `.trim();

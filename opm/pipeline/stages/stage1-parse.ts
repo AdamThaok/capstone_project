@@ -64,6 +64,13 @@ Rules:
 - If a process lists a "Process Computational Function", copy that code/formula
   VERBATIM into the process's "computation" field — it is the exact logic the
   generated app must implement.
+- Preserve EVERY arithmetic operator exactly. Never drop a multiplication sign:
+  write ")*100" not ")100", "a*b" not "ab". If two terms are juxtaposed with no
+  operator but multiplication is clearly intended (e.g. "(mw/cw)120",
+  "period1Weight pc1"), insert the explicit "*". The computation must be valid,
+  runnable code.
+- Keep variable names consistent and case-correct (e.g. do not mix "lt"/"It"/"Plt"
+  /"Pllt" — use one spelling per variable as the formula defines it).
 `.trim();
 
 type OpmObject  = { id: string; name?: string; kind?: string; states?: string[] };
