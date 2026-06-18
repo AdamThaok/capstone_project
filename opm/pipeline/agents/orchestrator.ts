@@ -12,25 +12,27 @@ import {
     reflectOnFailures,
     regenerateFromReflection,
 } from "./code-generation-agent";
-import type { CodeArtifact, TestReport, ReflectionNote, AgentIR } from "./types";
+import type { CodeArtifact, TestReport, ReflectionNote, AttemptRecord, AgentIR } from "./types";
 
 export type Outcome = "SUCCESS" | "EXHAUSTED" | "STALLED" | "RUNNING";
 
 // Pure stopping-condition decision (no I/O) — the heart of the loop, unit-tested.
 //   SUCCESS   : the Testing Agent reports no failures.
 //   EXHAUSTED : the iteration budget is spent.
-//   STALLED   : the same failures recurred (the model is stuck).
+//   STALLED   : this failure set has been seen before (the model is going in
+//               circles). `repeated` is computed by the loop against the SET of
+//               all prior signatures, so it catches A→B→A oscillation, not just
+//               an immediate A→A repeat.
 //   RUNNING   : keep going.
 export function decideHalt(state: {
-    passed:        boolean;
-    iter:          number;
-    maxIters:      number;
-    signature:     string;
-    lastSignature: string;
+    passed:   boolean;
+    iter:     number;
+    maxIters: number;
+    repeated: boolean;
 }): Outcome {
     if (state.passed) return "SUCCESS";
     if (state.iter >= state.maxIters) return "EXHAUSTED";
-    if (state.signature !== "" && state.signature === state.lastSignature) return "STALLED";
+    if (state.repeated) return "STALLED";
     return "RUNNING";
 }
 
@@ -61,8 +63,8 @@ export async function runBuildLoop(
     const maxIters = opts?.maxIters ?? 3;
     const log = opts?.log ?? (() => { /* no-op */ });
 
-    const ledger:  LedgerEntry[]   = [];
-    const history: ReflectionNote[] = [];
+    const ledger:  LedgerEntry[]  = [];
+    const history: AttemptRecord[] = [];
 
     const emptyCoverage = {
         total_elements: 0, covered: 0, coverage_pct: 0, missing: [],
@@ -72,7 +74,9 @@ export async function runBuildLoop(
     };
 
     let iter = 0;
-    let lastSignature = "";
+    // Every failure signature we've seen, so a recurring set (even non-consecutive)
+    // is detected as a stall instead of looping until the budget is exhausted.
+    const seenSignatures = new Set<string>();
     let reflection: ReflectionNote = { diagnosis: "", fixPlan: "" };
     let artifact: CodeArtifact = [];
     let report: TestReport = { passed: false, failures: [], signature: "", coverage: emptyCoverage, acceptanceTests: [], codeReview: [] };
@@ -99,18 +103,28 @@ export async function runBuildLoop(
             fixPlan:   reflection.fixPlan   || undefined,
         });
 
-        // HALT? — pure decision.
-        const outcome = decideHalt({ passed: report.passed, iter, maxIters, signature: report.signature, lastSignature });
+        // HALT? — pure decision. `repeated` = have we already seen this exact
+        // failure set on an earlier iteration?
+        const repeated = report.signature !== "" && seenSignatures.has(report.signature);
+        const outcome = decideHalt({ passed: report.passed, iter, maxIters, repeated });
         if (outcome !== "RUNNING") {
             log(`🛑 Build loop halted: ${outcome} after ${iter + 1} pass(es).`);
             return { artifact, report, outcome, iterations: iter + 1, ledger };
         }
 
-        // DECIDE — reflect on the failures to guide the next regeneration.
-        lastSignature = report.signature;
+        // Record this signature now that we're continuing, so a later recurrence stalls.
+        seenSignatures.add(report.signature);
+
+        // DECIDE — reflect on the failures to guide the next regeneration. Pair the
+        // reflection with the failures it was addressing so the next reflect sees
+        // both what was tried AND what it failed to fix.
         log("🧠 Code Generation Agent: reflecting on the failures…");
         reflection = await reflectOnFailures(report, history, ir);
-        history.push(reflection);
+        history.push({
+            failures:  report.failures.map((f) => f.detail),
+            diagnosis: reflection.diagnosis,
+            fixPlan:   reflection.fixPlan,
+        });
         iter++;
     }
 }

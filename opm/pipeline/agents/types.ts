@@ -31,6 +31,11 @@ export type TestReport = {
 // The Code Generation Agent's diagnosis before it rewrites code.
 export type ReflectionNote = { diagnosis: string; fixPlan: string };
 
+// One past loop iteration: the failures that were present, plus the reflection
+// the agent produced for them. Fed back into the next reflect so the model can
+// see what it already tried AND what that attempt failed to fix.
+export type AttemptRecord = { failures: string[]; diagnosis: string; fixPlan: string };
+
 // Minimal view of the OPM IR the agents need.
 export type AgentIR = {
     objects?:   { id: string; name?: string }[];

@@ -126,6 +126,30 @@ export async function deployFromGitHub(input: {
         console.warn("[railway] service create partial failure:", (e as Error).message);
     }
 
+    // 3b. Wire the backend to the Postgres service. Without this the backend boots
+    //     but has no DATABASE_URL and can't connect. We build the URL from the
+    //     postgres service's own variables + private network domain, and bake in
+    //     the async driver (+asyncpg) so SQLAlchemy's create_async_engine works.
+    async function setServiceVariable(serviceId: string, name: string, value: string) {
+        try {
+            await gql(token, `
+                mutation($input: VariableUpsertInput!) {
+                    variableUpsert(input: $input)
+                }
+            `, { input: { projectId, environmentId, serviceId, name, value } });
+        } catch (e) {
+            console.warn(`[railway] variableUpsert ${name} failed:`, (e as Error).message);
+        }
+    }
+
+    if (backendServiceId) {
+        // References resolve at deploy time against the "postgres" service created above.
+        const dbUrl =
+            "postgresql+asyncpg://${{postgres.POSTGRES_USER}}:${{postgres.POSTGRES_PASSWORD}}" +
+            "@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{postgres.POSTGRES_DB}}";
+        await setServiceVariable(backendServiceId, "DATABASE_URL", dbUrl);
+    }
+
     // 4. Generate a public domain for each service.
     async function generateDomain(serviceId: string) {
         try {

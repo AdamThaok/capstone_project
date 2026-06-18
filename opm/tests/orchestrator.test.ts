@@ -3,26 +3,26 @@ import { decideHalt } from "@/opm/pipeline/agents/orchestrator";
 
 describe("decideHalt (stopping conditions)", () => {
     it("SUCCESS when all checks pass", () => {
-        expect(decideHalt({ passed: true, iter: 0, maxIters: 3, signature: "", lastSignature: "" })).toBe("SUCCESS");
+        expect(decideHalt({ passed: true, iter: 0, maxIters: 3, repeated: false })).toBe("SUCCESS");
     });
 
     it("EXHAUSTED when the iteration budget is spent", () => {
-        expect(decideHalt({ passed: false, iter: 3, maxIters: 3, signature: "a", lastSignature: "b" })).toBe("EXHAUSTED");
+        expect(decideHalt({ passed: false, iter: 3, maxIters: 3, repeated: false })).toBe("EXHAUSTED");
     });
 
-    it("STALLED when the same failures recur", () => {
-        expect(decideHalt({ passed: false, iter: 1, maxIters: 3, signature: "x|y", lastSignature: "x|y" })).toBe("STALLED");
+    it("STALLED when a failure set recurs (any prior iteration, not just the last)", () => {
+        expect(decideHalt({ passed: false, iter: 2, maxIters: 5, repeated: true })).toBe("STALLED");
     });
 
-    it("RUNNING when failing, under budget, and making progress", () => {
-        expect(decideHalt({ passed: false, iter: 1, maxIters: 3, signature: "x", lastSignature: "y" })).toBe("RUNNING");
-    });
-
-    it("does not call an empty signature a stall on the first pass", () => {
-        expect(decideHalt({ passed: false, iter: 0, maxIters: 3, signature: "", lastSignature: "" })).toBe("RUNNING");
+    it("RUNNING when failing, under budget, and the failure set is new", () => {
+        expect(decideHalt({ passed: false, iter: 1, maxIters: 3, repeated: false })).toBe("RUNNING");
     });
 
     it("SUCCESS takes priority over an exhausted budget", () => {
-        expect(decideHalt({ passed: true, iter: 5, maxIters: 3, signature: "", lastSignature: "" })).toBe("SUCCESS");
+        expect(decideHalt({ passed: true, iter: 5, maxIters: 3, repeated: false })).toBe("SUCCESS");
+    });
+
+    it("EXHAUSTED takes priority over a stall", () => {
+        expect(decideHalt({ passed: false, iter: 3, maxIters: 3, repeated: true })).toBe("EXHAUSTED");
     });
 });

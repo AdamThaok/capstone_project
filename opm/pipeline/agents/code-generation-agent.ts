@@ -20,7 +20,7 @@ import {
     askJson as claudeAskJson,
     CODEGEN_MODEL,
 } from "@/opm/pipeline/llm/claude";
-import type { CodeArtifact, FileSpec, TestReport, ReflectionNote, AgentIR } from "./types";
+import type { CodeArtifact, FileSpec, TestReport, ReflectionNote, AttemptRecord, AgentIR } from "./types";
 
 type Progress = (msg: string) => void;
 
@@ -173,15 +173,19 @@ function buildLayerPrompt(layer: Layer, ctx: LayerContext): string {
     ].join("\n\n");
 }
 
-// Action 2: diagnose WHY the tests failed, before touching code. Past fix plans
-// are passed in so the agent does not repeat an approach that already failed.
+// Action 2: diagnose WHY the tests failed, before touching code. Each past attempt
+// is passed in paired with the failures it faced, so the agent sees not just what
+// it tried but what that attempt failed to fix — and avoids repeating it.
 export async function reflectOnFailures(
     report: TestReport,
-    history: ReflectionNote[],
+    history: AttemptRecord[],
     ir: AgentIR,
 ): Promise<ReflectionNote> {
     const priorPlans = history.length
-        ? history.map((h, i) => `Attempt ${i + 1}: "${h.fixPlan}"`).join("\n")
+        ? history
+            .map((h, i) =>
+                `Attempt ${i + 1}: faced [${h.failures.join("; ")}] → tried "${h.fixPlan}" → still failed.`)
+            .join("\n")
         : "(none yet)";
 
     const prompt = `
@@ -226,11 +230,19 @@ const ID_HOME_FILES = ["backend/models.py", "backend/routers.py", "TRACEABILITY.
 // full path, contains just the basename (build errors often print "App.tsx", not
 // the full path), or it's a coverage gap and this is an id-home file.
 function failurePointsAtFile(fail: { kind: string; id: string; detail: string }, file: FileSpec): boolean {
-    const base = file.path.split("/").pop() ?? file.path;
+    const base = file.path.split("/").pop() ?? file.path;          // "schemas.py"
+    const stem = base.replace(/\.[^.]+$/, "");                      // "schemas"
     if (fail.id.includes(file.path) || fail.detail.includes(file.path)) {
         return true;
     }
     if (base.length > 3 && fail.detail.includes(base)) {
+        return true;
+    }
+    // Symbol/import errors often name the module by stem, not path — e.g.
+    // "cannot import name 'UserCreate' from 'schemas'". Match on the stem so these
+    // scope to the right file instead of falling back to the whole repo. Guarded
+    // by length so noisy short stems (main/api/App) don't over-match.
+    if (stem.length > 4 && fail.detail.includes(stem)) {
         return true;
     }
     if (fail.kind === "uncovered_id" && ID_HOME_FILES.includes(file.path)) {

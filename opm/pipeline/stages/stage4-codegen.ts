@@ -114,6 +114,17 @@ Hard constraints (non-negotiable):
   HTTP 409 Conflict.
 - Consumees are destroyed, resultees created, instruments/agents required but
   untouched. Conditions are guards (skip/block per model).
+- Define the SQLAlchemy declarative Base ONCE (in the models module) and import
+  that SAME Base everywhere — including wherever metadata.create_all runs. Never
+  call declarative_base() in more than one module, or create_all builds an empty
+  schema and the app boots with no tables.
+- Use ONE import convention across the backend (all package-relative, e.g.
+  "from backend.x import ..."), consistent with how the app is launched, so it
+  imports cleanly from a single working directory.
+- Read DATABASE_URL from the environment and normalize it for the async driver:
+  convert BOTH "postgres://" AND a bare "postgresql://" (no "+driver") to
+  "postgresql+asyncpg://" before create_async_engine. Hosted Postgres (e.g.
+  Railway) hands you "postgresql://...", which the sync dialect can't run async.
 - Emit TRACEABILITY.md mapping each OPL sentence to the artifact(s) implementing it.
 `.trim();
 
