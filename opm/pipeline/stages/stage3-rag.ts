@@ -108,8 +108,10 @@ ZERO-CONFIG CLOUD DEPLOY REQUIREMENTS (HARD):
 - Emit railway.json at repo root describing two services + one Postgres plugin.
 - Backend reads PORT env (Railway default 8080); frontend serves on its PORT.
 - README.md has ONE link at top: "Live app: {{RAILWAY_URL}}" (literal placeholder).
-- CORS: backend allows FRONTEND_ORIGIN (env). .gitignore excludes .env,
-  node_modules, __pycache__, dist.
+- CORS: backend uses CORSMiddleware with allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+"
+  so ANY localhost port works (Vite falls back to 5174/5175/... when 5173 is busy — a hardcoded
+  port allowlist breaks the app with a CORS error). Also honor FRONTEND_ORIGIN (env) for the
+  deployed origin. .gitignore excludes .env, node_modules, __pycache__, dist.
 
 The super prompt MUST:
 - Begin with the reconstructed OPL paragraph.

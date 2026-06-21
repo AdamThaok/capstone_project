@@ -15,9 +15,16 @@ function isTextFile(rel: string): boolean {
 }
 
 // Token-bounded snapshot of the repo for the reviewer.
+//
+// DELIBERATE whole-repo read — and the ONLY one left after the codegen/integration
+// dumps were removed. It is SAFE here: Tier 4 is ADVISORY ONLY — its output lands in
+// acceptanceTests/codeReview and is NEVER added to `failures`/`signature` (see
+// testing-agent.ts), so it cannot re-trigger generation or cause the cross-file drift
+// that the in-loop full-repo regenerate did. A security/quality reviewer genuinely needs
+// the real file bodies, so signatures-only would defeat its purpose. Kept on purpose.
 function repoDigest(files: FileSpec[]): string {
     const blocks: string[] = [];
-    let budget = 400_000; // total characters we'll send (Gemini holds the whole repo easily)
+    let budget = 200_000; // char cap for the review prompt (trimmed from 400k to bound cost)
 
     for (const file of files) {
         // Skip non-text (binary) files.

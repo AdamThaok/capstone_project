@@ -142,7 +142,11 @@ const LAYERS: Layer[] = [
             "`COPY backend/ ./backend/` (preserve the package dir — NEVER `COPY backend/ .`), copy requirements " +
             "from ./backend/requirements.txt, and CMD running `python -m uvicorn backend.main:app --host 0.0.0.0 " +
             "--port 8000`. NEVER generate `cd backend && uvicorn main:app`. The EXPOSE/CMD port MUST equal the " +
-            "docker-compose.yml port.",
+            "docker-compose.yml port. " +
+            "CORS: configure CORSMiddleware with allow_origin_regex=r\"http://(localhost|127\\.0\\.0\\.1):\\d+\" " +
+            "(accept ANY localhost port) — NOT a hardcoded list like [\"http://localhost:5173\"]. Vite falls back " +
+            "to 5174/5175/... when 5173 is busy, so a fixed port allowlist breaks the app with a CORS error. " +
+            "Keep allow_methods=[\"*\"], allow_headers=[\"*\"]; with a regex origin you may keep allow_credentials=True.",
     },
     {
         name: "Frontend",
@@ -578,38 +582,9 @@ ${summarizeInterfaces(others)}
 `.trim();
 }
 
-// Unscoped fallback: no failure named a specific file (e.g. a coverage gap), so
-// hand over the whole repo and let the model decide what to change.
-function buildFullFixPrompt(
-    prevFiles: CodeArtifact,
-    note: ReflectionNote,
-    report: TestReport,
-    ir: AgentIR,
-): string {
-    return `
-You previously generated a project. The Testing Agent found these failures:
-${report.failures.map((f) => `- ${f.detail}`).join("\n")}
-
-Diagnosis: ${note.diagnosis}
-Fix plan:  ${note.fixPlan}
-
-Re-emit ONLY the files that must change to implement the fix, using the delimiter
-format:
-===FILE: path/to/file===
-<corrected content>
-===END===
-
-Rules:
-- Use the OPM IR "computation" fields VERBATIM for any formula; preserve every "*".
-- Do not introduce new features or remove files; only fix what failed.
-
-## OPM IR
-${JSON.stringify(ir, null, 2)}
-
-## Current files
-${prevFiles.map((f) => `===FILE: ${f.path}===\n${f.content}\n===END===`).join("\n\n")}
-`.trim();
-}
+// (buildFullFixPrompt removed — the unscoped full-repo regenerate embedded every
+//  file's body and drove cross-file drift, e.g. 1 failure -> 86 -> stall.
+//  regenerateFromReflection now ALWAYS scopes via buildScopedFixPrompt.)
 
 // Action 3: emit corrected files guided by the reflection, then merge them over
 // the previous artifact (patched files win; untouched files are kept).
@@ -625,15 +600,31 @@ export async function regenerateFromReflection(
 ): Promise<CodeArtifact> {
     const log = onProgress ?? (() => { /* no-op */ });
 
-    const targets = filesImplicatedBy(prevFiles, report);
-    let prompt = "";
-    if (targets.length > 0) {
-        log(`🎯 Scoped fix: re-emitting ${targets.length} implicated file(s).`);
-        prompt = buildScopedFixPrompt(prevFiles, targets, note, report, ir);
+    const implicated = filesImplicatedBy(prevFiles, report);
+    let scoped = implicated;
+    if (scoped.length === 0) {
+        // No failure pinned a file. NEVER dump the whole repo here (that caused the
+        // 1 -> 86-failure cross-file drift + stall). Two sub-cases:
+        const fileFixable = report.failures.some(
+            (f) => f.kind !== "invalid_formula" && f.kind !== "uncovered_id",
+        );
+        if (!fileFixable) {
+            // Every remaining failure lives in the OPM IR (a malformed formula or a
+            // coverage gap). The codegen loop can't edit the IR, so no file re-emit can
+            // clear it — skip the model call and let the loop STALL. That stall is the
+            // honest signal the defect is upstream (the IR), not in the generated code.
+            log("⏭️ No file-fixable failure (IR-level only) — skipping regeneration.");
+            return prevFiles;
+        }
+        // A file-fixable failure pinned nothing precise → scope to the bounded id-home
+        // files, NOT the whole repo. Every other file goes in as signatures only.
+        scoped = prevFiles.filter((f) => ID_HOME_FILES.includes(f.path));
+        if (scoped.length === 0) return prevFiles;   // nothing safe to scope to
+        log(`🧭 No file implicated — scoping to id-home files (${scoped.length}).`);
     } else {
-        log("🌐 Unscoped fix: no single file implicated — sending the full repo.");
-        prompt = buildFullFixPrompt(prevFiles, note, report, ir);
+        log(`🎯 Scoped fix: re-emitting ${scoped.length} implicated file(s).`);
     }
+    const prompt = buildScopedFixPrompt(prevFiles, scoped, note, report, ir);
 
     const text = await generateComplete(
         (p) => claudeAskText(p, CODEGEN_MODEL),
@@ -661,6 +652,20 @@ export async function integrationRepair(
     ir: AgentIR,
     onProgress?: Progress,
 ): Promise<CodeArtifact> {
+    // Bound the full-body context: only the failure-implicated files + the backend
+    // wiring hubs (where Base/engine/exports/imports live) get full bodies; the rest go
+    // in as signatures. Never dump the whole repo. This pass runs at most once at
+    // finalize and is guarded (its result is kept only if the failure count drops), so a
+    // rare unpinnable fallback to full bodies can't snowball like the in-loop path did.
+    const WIRING_HUBS = ["backend/models.py", "backend/database.py", "backend/main.py", "backend/routers.py", "backend/schemas.py"];
+    const implicated = filesImplicatedBy(files, report);
+    const fullPaths = new Set(implicated.map((f) => f.path));
+    for (const f of files) if (WIRING_HUBS.includes(f.path)) fullPaths.add(f.path);
+    let fullFiles = files.filter((f) => fullPaths.has(f.path));
+    if (fullFiles.length === 0) fullFiles = files;   // unpinned, no hubs present: this single guarded pass may use full bodies
+    const others = fullFiles === files ? [] : files.filter((f) => !fullPaths.has(f.path));
+    const fullBlocks = fullFiles.map((f) => `===FILE: ${f.path}===\n${f.content}\n===END===`).join("\n\n");
+
     const prompt = `
 The files below were generated layer-by-layer and may have CROSS-FILE
 inconsistencies that stop the app from importing or booting — e.g. a function
@@ -684,8 +689,11 @@ Rules:
 ## OPM IR
 ${JSON.stringify(ir, null, 2)}
 
-## Current files
-${files.map((f) => `===FILE: ${f.path}===\n${f.content}\n===END===`).join("\n\n")}
+## Files to fix (complete — re-emit only those you must change)
+${fullBlocks}
+
+## Rest of the repo (signatures only — DO NOT re-emit, just stay compatible)
+${fullFiles === files ? "(all files shown above)" : summarizeInterfaces(others, 200)}
 `.trim();
 
     const text = await generateComplete(
@@ -707,19 +715,21 @@ ${files.map((f) => `===FILE: ${f.path}===\n${f.content}\n===END===`).join("\n\n"
 const SIGNATURE_RE =
     /^\s*(import |class |def |async def |@app\.|@router\.|app\.(get|post|put|delete|patch)|router\.(get|post|put|delete|patch)|export |interface |type \w+\s*=|function )/;
 
-function signatureLines(file: FileSpec): string {
+function signatureLines(file: FileSpec, maxLines = 40): string {
     const keep: string[] = [];
     for (const line of file.content.split("\n")) {
         if (SIGNATURE_RE.test(line)) keep.push(line.trim());
     }
-    return keep.slice(0, 40).join("\n");
+    return keep.slice(0, maxLines).join("\n");
 }
 
 // Compact digest of already-written files: path + signature lines only (no bodies).
-export function summarizeInterfaces(written: FileSpec[]): string {
+// maxLines defaults to 40 (per-layer/scoped fixes); the integration pass passes a higher
+// cap so the export/Base/engine/route surface it must reconcile against isn't truncated.
+export function summarizeInterfaces(written: FileSpec[], maxLines = 40): string {
     const blocks: string[] = [];
     for (const f of written) {
-        const sig = signatureLines(f);
+        const sig = signatureLines(f, maxLines);
         blocks.push(`=== ${f.path} ===\n${sig || "(no notable signatures)"}`);
     }
     return blocks.join("\n\n");
